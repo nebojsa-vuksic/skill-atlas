@@ -37,7 +37,27 @@
       </dl>
 
       <h2 id="skill-count" class="skill-count"></h2>
-      <ul id="skills" class="skills"></ul>
+
+      <div id="split" class="split">
+        <div id="skills" class="skills" role="listbox" aria-label="Skills"></div>
+        <div id="divider" class="divider" role="separator" tabindex="0"
+             aria-orientation="vertical" aria-controls="skills" aria-label="Resize panes"></div>
+        <article id="detail" class="detail" aria-live="polite">
+          <header>
+            <h2 id="detail-name" class="detail-name"></h2>
+            <p id="detail-description" class="detail-description"></p>
+            <div id="detail-paths" class="detail-paths"></div>
+            <a id="detail-github" class="github-link" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>
+          </header>
+          <div class="tabs" role="tablist" aria-label="Skill content">
+            <button id="tab-rendered" class="tab" role="tab" type="button" aria-selected="true" aria-controls="rendered">Rendered</button>
+            <button id="tab-raw" class="tab" role="tab" type="button" aria-selected="false" aria-controls="raw">Raw</button>
+          </div>
+          <div id="rendered" class="markdown" role="tabpanel" aria-labelledby="tab-rendered"></div>
+          <pre id="raw" class="raw" role="tabpanel" aria-labelledby="tab-raw" hidden><code id="raw-code"></code></pre>
+          <p id="no-content" class="no-content" hidden>(content not available)</p>
+        </article>
+      </div>
 
       <div id="ignored" class="ignored" hidden>
         <h3 id="ignored-heading"></h3>

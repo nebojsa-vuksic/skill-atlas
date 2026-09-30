@@ -71,6 +71,15 @@ object SkillParser {
         return lines.subList(1, end + 1).joinToString("\n")
     }
 
+    /** The Markdown after the frontmatter, or the whole text when there is no frontmatter. */
+    fun body(text: String): String {
+        val lines = text.removePrefix("\uFEFF").lines()
+        if (lines.firstOrNull()?.trimEnd() != "---") return text.removePrefix("\uFEFF")
+        val end = lines.drop(1).indexOfFirst { it.trimEnd() == "---" }
+        if (end < 0) return text.removePrefix("\uFEFF")
+        return lines.drop(end + 2).joinToString("\n").trimStart('\n')
+    }
+
     private fun parseYaml(yaml: String): Map<*, *>? {
         val settings = LoadSettings.builder().setMaxAliasesForCollections(50).build()
         return try {
@@ -90,7 +99,7 @@ object SkillParser {
         else -> null
     }
 
-    private fun decodeUtf8(bytes: ByteArray): String? = try {
+    fun decodeUtf8(bytes: ByteArray): String? = try {
         Charsets.UTF_8.newDecoder()
             .onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)

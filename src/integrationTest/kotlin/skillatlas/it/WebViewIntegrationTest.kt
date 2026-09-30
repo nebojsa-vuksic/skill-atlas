@@ -52,7 +52,8 @@ class WebViewIntegrationTest {
         val commit = sandbox.createRepository(
             "acme/skills",
             mapOf(
-                "skills/pdf/SKILL.md" to "---\nname: pdf-extract\ndescription: Extract text and tables from PDF files.\n---\n",
+                "skills/pdf/SKILL.md" to
+                    "---\nname: pdf-extract\ndescription: Extract text and tables from PDF files.\n---\n\n# PDF\n\nUse `pdftotext`.\n",
                 "skills/csv/SKILL.md" to "---\nname: csv-tools\n---\n",
             ),
         )
@@ -65,10 +66,13 @@ class WebViewIntegrationTest {
             """{"repository":{"name":"acme/skills","description":"Acme agent skills","branch":"main","commit":"$commit"},""" +
                 """"skills":[""" +
                 """{"name":"csv-tools","description":"","short_description":"","path":"skills/csv",""" +
-                """"also_at":[],"shipped":false,"warnings":["missing description"]},""" +
+                """"also_at":[],"shipped":false,"warnings":["missing description"],""" +
+                """"content":"---\nname: csv-tools\n---\n","content_html":""},""" +
                 """{"name":"pdf-extract","description":"Extract text and tables from PDF files.",""" +
                 """"short_description":"Extract text and tables from PDF files.","path":"skills/pdf",""" +
-                """"also_at":[],"shipped":false,"warnings":[]}],"ignored":[]}""",
+                """"also_at":[],"shipped":false,"warnings":[],""" +
+                """"content":"---\nname: pdf-extract\ndescription: Extract text and tables from PDF files.\n---\n\n# PDF\n\nUse `pdftotext`.\n",""" +
+                """"content_html":"<h1>PDF</h1>\n<p>Use <code>pdftotext</code>.</p>\n"}],"ignored":[]}""",
             response.body,
         )
         assertEquals(1, sandbox.scanLogLines().size)

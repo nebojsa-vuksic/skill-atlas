@@ -325,6 +325,65 @@ Errors are shown as `error: <message>`, using the same messages as section 7. Op
 `/?url=<repository-url>` starts a scan right away. The page follows the system's light
 or dark color scheme and works at phone widths.
 
+**Split pane.** Below the repository summary and the skill count, the result is a split
+pane:
+
+```
+┌──────────────────────────┬─┬──────────────────────────────────────────────┐
+│ ● commits                │ │ mps-aspect-generator  ◆ shipped in product   │
+│   How to write commit…   │ │ Use when defining or modifying MPS generat…  │
+│   .agents/skills/commits │ │ .agents/skills/mps-aspect-generator          │
+├──────────────────────────┤ │ also in .claude/skills/mps-aspect-generator  │
+│▌● mps-aspect-generator   │ │ View on GitHub ↗                              │
+│▌  Use when defining or…  │ │ [ Rendered | Raw ]                            │
+│▌  .agents/skills/mps-…   │ │ ─────────────────────────────────────────────│
+├──────────────────────────┤ │ # MPS generators                              │
+│ ● mps-tests              │ │ …the skill file's content…                    │
+└──────────────────────────┴─┴──────────────────────────────────────────────┘
+   skill list (left)       divider       selected skill (right)
+```
+
+- **Left, the skill list.** Each skill is one item, with the same content and styles as
+  in the table above. Items are buttons. Clicking an item, or pressing Enter or Space,
+  selects it. ↑ and ↓ move the selection. The selected item is highlighted with the
+  accent color and marked `aria-selected="true"`. The list scrolls on its own.
+- **Right, the selected skill.** This pane shows:
+  - the skill name and its badges
+  - the **full** description, not the shortened one
+  - the main path and its `also in` copies
+  - a **View on GitHub** link to
+    `https://github.com/<repository>/blob/<commit>/<path>/SKILL.md`
+  - the skill file's content, in two tabs:
+    - **Rendered** (the default): the Markdown after the frontmatter, rendered as
+      CommonMark with GitHub-style tables.
+    - **Raw**: the exact file text, frontmatter included, in monospace.
+
+  The pane scrolls on its own. If the content isn't available (warnings
+  `file too large`, `unreadable file`, or a file that isn't UTF-8), it shows
+  `(content not available)`.
+- **Divider.** Drag it to resize the panes. When it's focused, ← and → move it. Each pane
+  keeps at least 240 px. The left pane starts at 38 % of the width, and the chosen width
+  is remembered in the browser.
+- **Selection.** After a scan, the first skill is selected. The selected skill's path is
+  kept in the page URL as `&skill=<path>`, so a link reopens the same repository with
+  the same skill selected.
+- **Narrow screens.** Below 760 px wide, the panes stack: the list comes first, then the
+  selected skill. Selecting an item scrolls the skill into view.
+- **Ignored test fixtures** stay listed below the split pane, and they can't be selected.
+
+**Rendering skill content safely.** Skill files come from untrusted repositories.
+Markdown is rendered on the server, with these rules:
+
+- Raw HTML in the Markdown is escaped and shown as text. It is never interpreted.
+- Only `http:`, `https:` and `mailto:` link targets are kept. Other schemes, such as
+  `javascript:`, are removed.
+- The page rewrites relative links to the skill's directory on GitHub at the scanned
+  commit, e.g. `reference.md` →
+  `https://github.com/<repository>/blob/<commit>/<path>/reference.md`.
+- Every link opens in a new tab with `rel="noopener noreferrer"`.
+- Images from other hosts are not loaded, because the Content-Security-Policy is
+  `default-src 'self'`.
+
 **API.** `GET /api/scan?url=<repository-url>` returns JSON:
 
 ```json
@@ -332,11 +391,16 @@ or dark color scheme and works at phone widths.
   "repository": {"name": "acme/skills", "description": "Acme agent skills", "branch": "main", "commit": "<sha>"},
   "skills": [
     {"name": "pdf-extract", "description": "<full>", "short_description": "<shortened>", "path": "skills/pdf",
-     "also_at": [], "shipped": false, "warnings": []}
+     "also_at": [], "shipped": false, "warnings": [],
+     "content": "---\nname: pdf-extract\n…", "content_html": "<h1>PDF</h1>\n…"}
   ],
   "ignored": [{"path": "src/test/resources/skills/demo", "reason": "test data"}]
 }
 ```
+
+`content` is the skill file's exact text, and `content_html` is its rendered Markdown
+body (see "Rendering skill content safely" above). Both are `null` when the content isn't
+available.
 
 Failures return `{"error": "<message>", "exit_code": <code>}`, with the message and code
 from section 7. The HTTP status depends on the exit code:
@@ -431,6 +495,8 @@ skill (section 4.3).
 12. JetBrains/MPS is reported as 41 skills with their `.claude` and product copies
     merged; JetBrains/koog's test fixtures are ignored; JetBrains/android's
     `agent/skills` are listed (section 4.4).
+13. In the web view, clicking any skill in the left list shows that skill's content in
+    the right pane (section 5.4).
 
 ## 11. Testing
 
@@ -504,6 +570,9 @@ They are meant for tests only.
 | Fixture under `src/jvmTest/resources` (koog) | Not listed as a skill; shown under the ignored test fixtures |
 | Same name, different content | Both listed with `duplicate name` |
 | The same edge cases through the web API | Exact `also_at`, `shipped` and `ignored` JSON |
+| Web API skill content | Exact `content` and `content_html`; raw `<script>` is escaped; `javascript:` links are removed |
+| Browser: split pane | Clicking a list item selects it and shows its full description, paths, GitHub link, and rendered content on the right |
+| Browser: keyboard and tabs | ↓ selects the next skill; the Raw tab shows the exact file text; `&skill=` in the URL reopens the selection |
 | `serve --port 0` | Prints the URL. `GET /` returns the page; `/app.js` and `/style.css` return the assets |
 | Web API scan | Exact JSON body; one scan log line; temp directory removed |
 | Web API errors | Invalid URL `400`, unknown repository `404`, missing `url` `400`; exact JSON bodies |
@@ -518,6 +587,13 @@ artifact.
 
 The test tools needed are `git`, a JDK, and `python3` (used to run the CLI in a
 pseudo-terminal). All three are preinstalled on GitHub-hosted runners.
+
+**Browser tests** are part of the integration tests. They drive the real page in
+headless Chromium through Playwright for Java, against a `serve --port 0` process with
+the usual stub API and fixture repositories. They wait for page elements, never for a
+fixed time. Playwright downloads Chromium on first use into `~/.cache/ms-playwright`
+(`~/Library/Caches/ms-playwright` on macOS). CI caches that folder, and on Linux it
+installs the browser's system libraries first with Playwright's `install-deps` command.
 
 ## 12. Definition of done
 

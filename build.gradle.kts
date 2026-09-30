@@ -21,6 +21,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.mosaic.runtime)
     implementation(libs.mosaic.tty)
+    implementation(libs.commonmark)
+    implementation(libs.commonmark.tables)
 
     testImplementation(kotlin("test"))
     testImplementation(libs.mosaic.testing)
@@ -49,6 +51,15 @@ tasks.test {
     useJUnitPlatform()
 }
 
+// Downloads headless Chromium for the browser tests into Playwright's cache; a no-op once cached.
+val installPlaywrightChromium by tasks.registering(JavaExec::class) {
+    classpath = files(configurations.named("integrationTestRuntimeClasspath"))
+    mainClass = "com.microsoft.playwright.CLI"
+    // CI on Linux passes -PplaywrightWithDeps to also install Chromium's system libraries (needs sudo).
+    val withDeps = providers.gradleProperty("playwrightWithDeps").isPresent
+    args(listOfNotNull("install", "--with-deps".takeIf { withDeps }, "--only-shell", "chromium"))
+}
+
 // Black-box tests that run the installed CLI as a separate process (spec section 11.2).
 testing {
     suites {
@@ -58,11 +69,15 @@ testing {
                 implementation("org.jetbrains.kotlin:kotlin-test-junit5")
                 // The Compose compiler plugin applies to every compilation and insists on its runtime.
                 compileOnly(libs.mosaic.runtime)
+                // Drives the web view in headless Chromium (spec section 11.3).
+                implementation(libs.playwright)
             }
             targets.all {
                 testTask.configure {
                     val installDist = tasks.installDist
-                    dependsOn(installDist)
+                    dependsOn(installDist, installPlaywrightChromium)
+                    // Browsers come only from installPlaywrightChromium, never from a surprise download mid-test.
+                    environment("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")
                     inputs.dir(installDist.map { it.destinationDir })
                     systemProperty(
                         "skillAtlas.launcher",
