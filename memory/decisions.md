@@ -127,3 +127,23 @@ completion), `ShellState.kt` (history and keys), `ShellSession.kt` (commands) an
 a terminal the old usage error stays, so scripts don't hang on a prompt.
 **How to apply:** a new command is a row in `ShellCommands.ALL` plus a branch in
 `ShellSession.execute`, with a unit test and a line in the spec's command table.
+
+## Demo narration: an original voice, from local Kokoro (2026-09-30)
+
+Demos have a voice-over and captions (spec 13.4). The voice is Kokoro (`kokoro-onnx`,
+`af_heart`), a local neural TTS model. `demo/setup-voice.sh` installs it into `demo/.venv`
+and `demo/.kokoro/`, both git-ignored.
+
+**Why:** the owner asked for a celebrity's voice. We don't imitate real people, so it's an
+original narrator instead. macOS `say` was "really robotic". The owner then chose Kokoro
+over macOS Premium voices and cloud TTS, because it's natural, offline, and free.
+**How to apply:** never clone or imitate a real person's voice. `DEMO_TTS=say` is only a
+fallback.
+
+## A narrated feature tour on the demos branch (2026-09-30)
+
+Six demos (`demo/tour-*`) cover every feature. They're published to `demos/tour/` and
+linked from the README (spec 13.5).
+
+**How to apply:** when a feature changes what users see, update or add a tour demo, record
+it again, and republish with `demo/publish.sh tour …`.

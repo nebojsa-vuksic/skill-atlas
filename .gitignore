@@ -37,6 +37,8 @@ build/
 
 # Demo recordings (spec section 13)
 demo/node_modules/
+demo/.venv/
+demo/.kokoro/
 
 # Worktrees that Claude Code creates for subagents
 .claude/worktrees/

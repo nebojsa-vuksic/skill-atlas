@@ -20,6 +20,23 @@ You need `ffmpeg`, plus `vhs` (`brew install vhs`, which also brings `ffmpeg` an
 Node.js, and a `gh` login. `record.sh` gets a `GITHUB_TOKEN` from `gh auth token`, and it
 uses a temporary scan log so demo scans never go into yours.
 
+## Narration
+
+Every demo is narrated by an **original** voice: confident, upbeat, and made of short lines.
+Never imitate a real person's voice or catchphrases, even when asked. Offer the original
+narrator instead.
+
+- **Web scripts** use `startWebDemo(outDir, LINES)` from `demo/lib/web.mjs`, with every line
+  listed up front, then `await demo.say(LINES.x)` at each step. `say` waits until the line
+  has finished, so there are no pauses to keep in sync.
+- **Tapes** put `# say: <line>` before the steps it describes. `Sleep` must be at least as
+  long as the line. `record.sh` fails and names the line when it isn't.
+- **Lines** should be one idea each, at most about 20 words (6 s). Say what the viewer is
+  seeing right now, not what comes next.
+- **Voice:** Kokoro `af_heart` by default. Set `DEMO_VOICE=am_michael` for a male narrator.
+  `demo/setup-voice.sh` installs Kokoro once, and `record.sh` runs it if needed.
+  `DEMO_TTS=say` is the robotic fallback.
+
 ## Steps
 
 1. **Pick a name** for the feature, e.g. `multi-repo`. Copy the closest existing
@@ -30,9 +47,10 @@ uses a temporary scan log so demo scans never go into yours.
    Use real repositories: JetBrains/MPS, JetBrains/koog, JetBrains/android and
    anthropics/skills all show the interesting cases.
 3. **Record** with `demo/record.sh <name>`.
-4. **Watch the result before you publish it.** Pull frames with
-   `ffmpeg -ss <seconds> -i build/demo/<name>/web.mp4 -frames:v 1 /tmp/frame.png` and look
-   at them. Every step should show what the script says it shows. An empty list or a
+4. **Watch the result before you publish it.** Pull one frame per narrated line (the times
+   are in `build/demo/<name>/*.narration.json`) with
+   `ffmpeg -ss <seconds> -i build/demo/<name>/web.mp4 -frames:v 1 /tmp/frame.png`, and look at
+   each one. The caption must describe what's on screen in that frame. Every step should show what the script says it shows. An empty list or a
    spinner in a key frame means the demo is wrong. Fix the script and record again.
 5. **Open the PR first,** because you need its number. Then run
    `demo/publish.sh <pr-number> <name>` and paste the printed Markdown into the PR's
@@ -58,6 +76,9 @@ uses a temporary scan log so demo scans never go into yours.
 - The VHS terminal is a TTY, so `scan` shows the rich Mosaic view. Pipe into
   `sed -n 'a,bp'` to show the plain format, or to crop long output.
 
+**A narrated feature tour:** see `demo/tour-*/`, and publish several demos at once with
+`demo/publish.sh tour tour-web-basics tour-cli …`.
+
 **An interactive terminal view** (`browse` or the shell):
 - Send keys with VHS: `Type "/pdf"`, `Enter`, `Tab`, `Down`, `Escape`. Put a `Sleep 1s` after
   each key so viewers can follow along.
@@ -75,8 +96,12 @@ uses a temporary scan log so demo scans never go into yours.
   Run `gh auth status`.
 - **The recording shows old UI:** `record.sh` always runs `installDist`. If you started
   `serve` by hand, it's a stale build (see `memory/gotchas.md`).
-- **The GIF is over its limit** (8 MB for web, 5 MB for terminal): shorten the pauses or
-  steps. Don't lower the quality.
+- **The GIF is over its limit** (10 MB for web, 6 MB for terminal): shorten the steps.
+  Don't lower the quality.
+- **Captions lag the terminal video:** the tape needs `Set Framerate 20`. At 50 fps VHS drops
+  frames and the video comes out time-compressed.
+- **The caption is a huge dark box:** the caption page needs `align-items: flex-start`,
+  otherwise flex layout stretches the bar to the full page height.
 - **`publish.sh` fails on commit:** commit signing uses 1Password. Unlock it and run the
   script again, since it's safe to repeat. Pushing needs the `gh` credential helper set up
   as in `memory/gotchas.md`.

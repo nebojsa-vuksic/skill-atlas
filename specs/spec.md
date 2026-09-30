@@ -1217,6 +1217,7 @@ it looks the same every time, and no screen-recording permission is needed.
 | What | Tool | Output |
 |------|------|--------|
 | Web view | Playwright video recording in headless Chromium, driven by a Node script | `.webm`, converted to `.mp4` and `.gif` with `ffmpeg` |
+| Voice-over | Kokoro (local neural TTS), or macOS `say` as a fallback | `.wav` lines mixed into the `.mp4` |
 | Terminal (`scan`, `browse`, shell) | VHS, driven by a `.tape` script | `.gif` and `.mp4` |
 
 `demo/package.json` pins Playwright to the same version as the Java tests. VHS
@@ -1240,21 +1241,29 @@ The demo scripts run against real GitHub repositories, with `GITHUB_TOKEN=$(gh a
 because a demo shows the real thing. They aren't tests and aren't part of `./gradlew build`.
 
 A demo file must stay small:
-- **Web GIF:** at most 30 s, 960 px wide, 10 fps, and under 8 MB.
-- **Terminal GIF:** under 5 MB.
+- **Web GIF:** at most 60 s, 960 px wide, 8 fps, and under 10 MB.
+- **Terminal GIF:** under 6 MB.
 
-The `.mp4` is kept next to the GIF for full quality.
+The `.mp4` is kept next to the GIF for full quality, and it carries the voice-over.
 
 ### 13.3 Publishing
 
 Demo files never go into `main`. They live on an **orphan branch** called `demos`, which
-has no shared history with `main`, under `demos/pr-<number>/`. `demo/publish.sh`:
+has no shared history with `main`. `demo/publish.sh <target> <name>...` publishes one or
+more recorded demos:
+
+- **`<target>`:** a PR number, which puts the demos under `demos/pr-<number>/`, or a label
+  such as `tour`, which puts them under `demos/<label>/`.
+- **One name** puts its files directly in that folder. **Several names** each get a
+  subfolder: `demos/<target>/<name>/`.
+
+The script:
 
 1. Checks out `demos` in a temporary worktree, or creates the orphan branch if it doesn't
    exist.
-2. Copies `build/demo/<name>/*` into `demos/pr-<number>/`.
+2. Copies each `build/demo/<name>/*.gif` and `*.mp4` into place.
 3. Commits and pushes `demos`.
-4. Prints Markdown for the pull request:
+4. Prints Markdown for each demo:
 
 ```markdown
 ![Web demo](https://github.com/<owner>/<repo>/blob/demos/demos/pr-<n>/web.gif?raw=true)
@@ -1264,7 +1273,59 @@ has no shared history with `main`, under `demos/pr-<number>/`. `demo/publish.sh`
 The repository is private, so these links work for people who have access to it. That's
 the same audience as the pull request.
 
-### 13.4 Skill
+### 13.4 Voice-over and captions
+
+Demos are narrated. An **original** narrator explains what's happening: a confident,
+upbeat voice with short, punchy lines. It must never imitate a real person's voice or
+catchphrases.
+
+- **Voice:** Kokoro, an open-source (Apache-2.0) neural text-to-speech model that runs
+  locally through `kokoro-onnx`. It sounds natural, works offline, needs no account, and
+  uploads nothing. The default voice is `af_heart` at speed 1.05. `DEMO_VOICE` and
+  `DEMO_SPEED` override it. `demo/setup-voice.sh` installs it once: a Python venv in
+  `demo/.venv` and about 340 MB of model files in `demo/.kokoro/`, both git-ignored.
+  `record.sh` runs the setup when it's missing. `DEMO_TTS=say` falls back to macOS `say`,
+  which is robotic but needs nothing installed.
+- **Web scripts** call `narrate(page, "…")` from `demo/lib/narrator.mjs`. It renders the
+  line with `say`, notes the time since the recording started, and then waits for the
+  line's length plus 0.4 s. The video therefore never runs ahead of the voice, and the
+  script has no fixed pauses to keep in sync.
+- **Terminal tapes** put a `# say: …` comment before the steps it describes.
+  `demo/lib/tape-narration.mjs` works out each line's start time from the tape:
+  - typing takes the length of the text times `TypingSpeed`
+  - `Sleep` adds its duration
+  - a key such as `Enter` or `Tab` adds `TypingSpeed`
+  - time between `Hide` and `Show` isn't recorded, so it doesn't count
+
+  **Recording fails** if a line lasts longer than the time until the next line or the end
+  of the tape. The fix is a longer `Sleep`.
+- **Frame rate:** tapes use `Set Framerate 20`. At VHS's default of 50 fps, capture couldn't
+  keep up on a laptop. It dropped frames, and the video came out 25–40 % shorter than the
+  tape, so the voice drifted behind the screen. If a recording is still more than 3 %
+  shorter than the tape's timeline, `finish.mjs` stretches the video back to it.
+- **Mixing:** `record.sh` places each line at its start time with `ffmpeg` (`adelay`, then
+  `amix`) and muxes it into the `.mp4` as AAC.
+- **Captions:** the same lines are rendered as caption images by headless Chromium (white
+  text on a dark, rounded, 85 %-opaque bar at the bottom). They're laid over the video with
+  `ffmpeg`'s `overlay` filter, which needs no subtitle library. Captions are burned into
+  both the `.mp4` and the `.gif`, since a GIF has no sound.
+- `narration.json` in the output folder lists every line with its start time and length.
+
+### 13.5 The feature tour
+
+`demo/tour-*/` demos every feature. It is published with `demo/publish.sh tour …`, and
+the README links it.
+
+| Demo | Kind | Shows |
+|------|------|-------|
+| `tour-web-basics` | web | Scanning a repository; the split pane, with the full description, paths, GitHub link and rendered file; the Raw tab; the divider; similar skills |
+| `tour-web-search` | web | JetBrains/MPS duplicates and product skills; the filter; snippets; no match; Esc; the filter kept in the URL |
+| `tour-web-multi` | web | Three repositories as chips, with a summary table and grouped lists; search across them; `repo:`; similar skills across repositories; removing a chip |
+| `tour-cli` | terminal | `scan` in rich and plain form; merged copies, product labels and ignored fixtures (MPS, koog); `--filter`; `--skill`; several repositories |
+| `tour-browse` | terminal | `browse`: moving, the live filter, jumping to a similar skill, quitting |
+| `tour-shell` | terminal | The shell: the palette, Tab completion, `/scan`, `/filter`, `/skill` with name completion, `/log`, `/quit` |
+
+### 13.6 Skill
 
 How to record a demo is also captured as the `record-demo` skill
 (`.agents/skills/record-demo/SKILL.md`, with an identical copy in `.claude/skills/`). It

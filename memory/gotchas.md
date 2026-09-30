@@ -194,3 +194,33 @@ script whose text contains `git`.
 
 **How to apply:** write scripts to `/tmp` with the Write tool and run them with `python3` or
 `bash`, one plain command per call.
+
+## VHS at 50 fps drops frames and time-compresses the video (2026-09-30)
+
+On this laptop, VHS's default framerate produced videos 25–40 % shorter than the tape, so
+the narration drifted behind the screen. At `Set Framerate 20`, a 29.5 s tape records as
+29.48 s.
+
+**How to apply:** every tape sets `Framerate 20`. `finish.mjs` also stretches a recording
+that comes out more than 3 % short of `terminal.duration`.
+
+## Homebrew ffmpeg has no drawtext or subtitles filter (2026-09-30)
+
+The build lacks libass and freetype, so captions can't be drawn by ffmpeg.
+
+**How to apply:** captions are rendered as PNGs with headless Chromium and laid over the
+video with `overlay=…:enable='between(t,a,b)'` (`demo/lib/finish.mjs`).
+
+## A flex parent stretches its child to the viewport height (2026-09-30)
+
+The first caption PNGs were 400 px tall dark boxes covering the video.
+
+**How to apply:** use `align-items: flex-start` when screenshotting a single element for
+compositing.
+
+## kokoro-onnx works on Python 3.14 without PyTorch (2026-09-30)
+
+`pip install kokoro-onnx soundfile` works on Homebrew's Python 3.14. The model files
+(`kokoro-v1.0.onnx`, 310 MB, and `voices-v1.0.bin`, 27 MB) come from the kokoro-onnx GitHub
+release. Each line takes about 1.3 s to render once the model is loaded, so load it once
+per demo (`kokoro_say.py` reads JSON on stdin).
