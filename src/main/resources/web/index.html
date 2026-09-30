@@ -39,9 +39,18 @@
       <h2 id="skill-count" class="skill-count"></h2>
 
       <div id="split" class="split">
-        <div id="skills" class="skills" role="listbox" aria-label="Skills"></div>
+        <div id="list-pane" class="list-pane">
+          <div class="filter">
+            <span class="filter-icon" aria-hidden="true">🔍</span>
+            <input id="filter" class="filter-input" type="search" placeholder="Filter skills"
+                   aria-label="Filter skills" aria-controls="skills" spellcheck="false" autocomplete="off">
+            <span id="filter-count" class="filter-count" aria-live="polite"></span>
+          </div>
+          <p id="no-match" class="no-match" hidden></p>
+          <div id="skills" class="skills" role="listbox" aria-label="Skills"></div>
+        </div>
         <div id="divider" class="divider" role="separator" tabindex="0"
-             aria-orientation="vertical" aria-controls="skills" aria-label="Resize panes"></div>
+             aria-orientation="vertical" aria-controls="list-pane" aria-label="Resize panes"></div>
         <article id="detail" class="detail" aria-live="polite">
           <header>
             <h2 id="detail-name" class="detail-name"></h2>

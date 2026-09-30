@@ -13,6 +13,8 @@
   --error: #b42318;
   --error-bg: #fdecea;
   --selected-bg: #e6f4f7;
+  --hover-bg: #f0f7f9;
+  --mark-bg: #fde68a;
   --code-bg: #eef0f3;
   color-scheme: light dark;
 }
@@ -33,6 +35,8 @@
     --error: #ff7b72;
     --error-bg: #3d1a18;
     --selected-bg: #12303a;
+    --hover-bg: #172229;
+    --mark-bg: #6b5412;
     --code-bg: #20252c;
   }
 }
@@ -169,21 +173,60 @@ button:disabled { opacity: 0.6; cursor: progress; }
   overflow: hidden;
 }
 
-.skills {
+/* The filter stays on top of the left pane while the list below it scrolls. */
+.list-pane {
   min-width: 0;
-  overflow-y: auto;
-  padding: 8px;
-  display: grid;
-  align-content: start;
-  gap: 6px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.filter-icon { font-size: 13px; }
+
+.filter .filter-input {
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--bg);
+}
+
+.filter-count {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.filter-count.active { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+
+.no-match { margin: 0; padding: 16px 12px; color: var(--muted); }
+
+.skills {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Compact items: a name line and at most two description lines, separated by thin lines. */
 .skill {
   display: block;
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 12px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
   background: var(--bg);
   color: var(--text);
   font: inherit;
@@ -192,20 +235,46 @@ button:disabled { opacity: 0.6; cursor: progress; }
   cursor: pointer;
 }
 
-.skill:hover { border-color: var(--accent); }
-.skill:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.skill:hover { background: var(--hover-bg); }
+.skill:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .skill[aria-selected="true"] {
-  border-color: var(--accent);
   background: var(--selected-bg);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.skill-name { display: block; color: var(--accent); font-weight: 700; font-size: 15px; }
+.skill-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+
+.skill-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 15px;
+}
 .skill-name::before { content: "● "; }
 
-.skill .skill-description,
-.skill .skill-path { display: block; }
+.icon { flex: none; font-size: 12px; cursor: help; }
+.shipped-icon { color: var(--branch); }
+.warning-icon { color: var(--warn); }
+.copies-icon { color: var(--muted); }
+
+.skill .skill-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.skill mark { background: var(--mark-bg); color: inherit; border-radius: 2px; }
 
 .divider {
   background: var(--surface);
@@ -301,7 +370,7 @@ button:disabled { opacity: 0.6; cursor: progress; }
 @media (max-width: 759px) {
   .split { display: block; height: auto; }
   .divider { display: none; }
-  .skills { max-height: 50vh; border-bottom: 1px solid var(--border); }
+  .list-pane { max-height: 50vh; border-bottom: 1px solid var(--border); }
   .detail { padding: 16px; }
 }
 

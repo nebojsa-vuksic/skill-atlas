@@ -9,7 +9,9 @@ const MIN_PANE = 240;
 const DEFAULT_LEFT_FRACTION = 0.38;
 const WIDTH_KEY = "skill-atlas.left-fraction";
 
-let current = null; // { result, selected }
+const SNIPPET_CONTEXT = 40;
+
+let current = null; // { result, selected, shown, visible }
 let activeTab = "rendered";
 
 function show(element, visible) {
@@ -61,16 +63,38 @@ function githubUrl(repository, path) {
     (path === "." ? "" : path + "/");
 }
 
-// ---- URL state: ?url=<repository>&skill=<path> ----
+// ---- URL state: ?url=<repository>&skill=<path>&q=<filter> ----
 
-function writeLocation(url, skillPath) {
+function writeLocation(url, skillPath, query = "") {
   const params = new URLSearchParams();
   params.set("url", url);
   if (skillPath) params.set("skill", skillPath);
+  if (query.trim()) params.set("q", query);
   history.replaceState(null, "", "?" + params.toString());
 }
 
+function updateLocation() {
+  const shown = current && current.shown >= 0 ? current.result.skills[current.shown].path : null;
+  writeLocation($("url").value.trim(), shown, $("filter").value);
+}
+
 // ---- Left pane: the skill list ----
+
+// Small icons at the end of an item's name line; the full labels are in the right pane.
+function icons(skill) {
+  const nodes = [];
+  const icon = (className, text, title) => {
+    const node = element("span", "icon " + className, text);
+    node.title = title;
+    nodes.push(node);
+  };
+  if (skill.shipped) icon("shipped-icon", "◆", "shipped in product");
+  if (skill.warnings.length > 0) icon("warning-icon", "⚠", skill.warnings.join("\n"));
+  if (skill.also_at.length > 0) {
+    icon("copies-icon", "⧉ " + skill.also_at.length, skill.also_at.map((copy) => "also in " + copy).join("\n"));
+  }
+  return nodes;
+}
 
 function renderSkillItem(skill, index) {
   const item = element("button", "skill");
@@ -80,20 +104,169 @@ function renderSkillItem(skill, index) {
   item.tabIndex = -1;
   item.dataset.path = skill.path;
 
-  const name = element("span", "skill-name", skill.name);
-  name.append(...badges(skill));
-  item.append(name);
+  const head = element("span", "skill-head");
+  head.append(element("span", "skill-name", skill.name), ...icons(skill));
 
-  const description = skill.short_description
-    ? element("span", "skill-description", skill.short_description)
-    : element("span", "skill-description none", "(no description)");
+  const description = element("span", "skill-description");
   if (skill.description && skill.description !== skill.short_description) {
     description.title = skill.description;
   }
-  item.append(description, ...paths(skill));
+  item.append(head, description);
+  fillItem(item, skill, []);
   item.addEventListener("click", () => select(index, { focus: true }));
   return item;
 }
+
+// ---- Filter (spec section 5.5) ----
+
+function queryWords(query) {
+  return query.toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+function matches(skill, words) {
+  const name = skill.name.toLowerCase();
+  const description = (skill.description || "").toLowerCase();
+  return words.every((word) => name.includes(word) || description.includes(word));
+}
+
+// Every [start, end) range where one of the words occurs in text, merged and sorted.
+function matchRanges(text, words) {
+  const lower = text.toLowerCase();
+  const ranges = [];
+  for (const word of words) {
+    for (let at = lower.indexOf(word); at >= 0; at = lower.indexOf(word, at + 1)) {
+      ranges.push([at, at + word.length]);
+    }
+  }
+  ranges.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const range of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]);
+    else merged.push(range);
+  }
+  return merged;
+}
+
+// Fills node with text, wrapping the matched words in <mark>. Built from text nodes only.
+function setHighlighted(node, text, words) {
+  const parts = [];
+  let at = 0;
+  for (const [start, end] of matchRanges(text, words)) {
+    if (start > at) parts.push(document.createTextNode(text.slice(at, start)));
+    const mark = document.createElement("mark");
+    mark.textContent = text.slice(start, end);
+    parts.push(mark);
+    at = end;
+  }
+  if (at < text.length) parts.push(document.createTextNode(text.slice(at)));
+  node.replaceChildren(...parts);
+}
+
+// Up to SNIPPET_CONTEXT characters on each side of text[start, end), cut at word boundaries.
+function snippet(text, start, end) {
+  let from = Math.max(0, start - SNIPPET_CONTEXT);
+  if (from > 0 && text[from - 1] !== " ") {
+    const space = text.indexOf(" ", from);
+    from = space >= 0 && space < start ? space + 1 : start;
+  }
+  let to = Math.min(text.length, end + SNIPPET_CONTEXT);
+  if (to < text.length && text[to] !== " ") {
+    const space = text.lastIndexOf(" ", to);
+    to = space >= end ? space : end;
+  }
+  return (from > 0 ? "…" : "") + text.slice(from, to).trim() + (to < text.length ? "…" : "");
+}
+
+// The item's description line: the shortened description, or a snippet around the first
+// match when a word only occurs past the part that the shortened description shows.
+function descriptionLine(skill, words) {
+  if (!skill.short_description) return null;
+  const shown = skill.short_description.replace(/…$/, "").toLowerCase();
+  const full = skill.description.replace(/\s+/g, " ").trim();
+  const lower = full.toLowerCase();
+  let first = -1;
+  let length = 0;
+  for (const word of words) {
+    const at = lower.indexOf(word);
+    if (at < 0 || shown.includes(word)) continue;
+    if (first < 0 || at < first) {
+      first = at;
+      length = word.length;
+    }
+  }
+  return first < 0 ? skill.short_description : snippet(full, first, first + length);
+}
+
+function fillItem(item, skill, words) {
+  setHighlighted(item.querySelector(".skill-name"), skill.name, words);
+  const description = item.querySelector(".skill-description");
+  const line = descriptionLine(skill, words);
+  description.classList.toggle("none", line === null);
+  if (line === null) description.textContent = "(no description)";
+  else setHighlighted(description, line, words);
+}
+
+function applyFilter() {
+  if (!current) return;
+  const query = $("filter").value;
+  const words = queryWords(query);
+  const skills = current.result.skills;
+  current.visible = [];
+  items().forEach((item, i) => {
+    const visible = matches(skills[i], words);
+    item.hidden = !visible;
+    if (visible) {
+      current.visible.push(i);
+      fillItem(item, skills[i], words);
+    }
+  });
+
+  const count = $("filter-count");
+  count.textContent = current.visible.length + " of " + skills.length;
+  count.classList.toggle("active", words.length > 0);
+  $("no-match").textContent = 'No skills match "' + query.trim() + '".';
+  show($("no-match"), current.visible.length === 0);
+
+  if (current.visible.length === 0) {
+    showNothing();
+  } else if (!current.visible.includes(current.selected)) {
+    select(current.visible[0]);
+  } else if (current.shown !== current.selected) {
+    select(current.selected);
+  }
+  updateLocation();
+}
+
+// Sets the filter, e.g. to clear it before selecting a skill that it hides.
+function setFilter(query) {
+  $("filter").value = query;
+  applyFilter();
+}
+
+$("filter").addEventListener("input", applyFilter);
+
+$("filter").addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    setFilter("");
+  } else if (event.key === "ArrowDown" && current && current.shown >= 0) {
+    event.preventDefault();
+    items()[current.shown].focus();
+  }
+});
+
+function isTextField(target) {
+  return target instanceof HTMLElement &&
+    (target.isContentEditable || target.matches("input, textarea, select"));
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (isTextField(event.target) || !current || $("split").hidden) return;
+  event.preventDefault();
+  $("filter").focus();
+});
 
 function items() {
   return Array.from($("skills").querySelectorAll('[role="option"]'));
@@ -102,9 +275,12 @@ function items() {
 $("skills").addEventListener("keydown", (event) => {
   if (!current || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return;
   event.preventDefault();
+  const visible = current.visible;
+  if (visible.length === 0) return;
   const step = event.key === "ArrowDown" ? 1 : -1;
-  const next = Math.min(Math.max(current.selected + step, 0), current.result.skills.length - 1);
-  select(next, { focus: true });
+  const at = visible.indexOf(current.selected);
+  const next = at < 0 ? 0 : Math.min(Math.max(at + step, 0), visible.length - 1);
+  select(visible[next], { focus: true });
 });
 
 // ---- Right pane: the selected skill ----
@@ -164,21 +340,34 @@ function showTab(tab, hasContent = true) {
 $("tab-rendered").addEventListener("click", () => showTab("rendered"));
 $("tab-raw").addEventListener("click", () => showTab("raw"));
 
-function select(index, { focus = false } = {}) {
-  if (!current || index < 0 || index >= current.result.skills.length) return;
-  current.selected = index;
-  const all = items();
-  all.forEach((item, i) => {
+function markSelected(index) {
+  items().forEach((item, i) => {
     const selected = i === index;
     item.setAttribute("aria-selected", String(selected));
     item.tabIndex = selected ? 0 : -1;
   });
+}
+
+// Nothing matches the filter: no item is selected and the right pane is empty. The
+// selection is remembered, so clearing the filter brings it back.
+function showNothing() {
+  current.shown = -1;
+  markSelected(-1);
+  show($("detail"), false);
+}
+
+function select(index, { focus = false } = {}) {
+  if (!current || index < 0 || index >= current.result.skills.length) return;
+  current.selected = index;
+  current.shown = index;
+  markSelected(index);
+  const all = items();
   all[index].scrollIntoView({ block: "nearest" });
   if (focus) all[index].focus({ preventScroll: true });
 
-  const skill = current.result.skills[index];
-  renderDetail(skill, current.result.repository);
-  writeLocation($("url").value.trim(), skill.path);
+  show($("detail"), true);
+  renderDetail(current.result.skills[index], current.result.repository);
+  updateLocation();
   if (focus && window.matchMedia("(max-width: 759px)").matches) {
     $("detail").scrollIntoView({ block: "start", behavior: "smooth" });
   }
@@ -235,7 +424,7 @@ $("divider").addEventListener("pointerdown", (event) => {
 $("divider").addEventListener("keydown", (event) => {
   if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
   event.preventDefault();
-  const width = $("skills").getBoundingClientRect().width;
+  const width = $("list-pane").getBoundingClientRect().width;
   setLeftWidth(width + (event.key === "ArrowRight" ? 24 : -24));
 });
 
@@ -245,7 +434,7 @@ window.addEventListener("resize", () => {
 
 // ---- Result ----
 
-function render(result, preferredPath) {
+function render(result, preferredPath, query) {
   const repository = result.repository;
   const name = $("repo-name");
   name.textContent = repository.name;
@@ -273,15 +462,16 @@ function render(result, preferredPath) {
   show($("ignored"), ignored.length > 0);
 
   show($("result"), true);
-  current = { result, selected: -1 };
+  const preferred = result.skills.findIndex((skill) => skill.path === preferredPath);
+  current = { result, selected: Math.max(preferred, 0), shown: -1, visible: [] };
+  $("filter").value = query || "";
   if (count > 0) {
     applyStoredWidth();
-    const preferred = result.skills.findIndex((skill) => skill.path === preferredPath);
-    select(preferred >= 0 ? preferred : 0);
+    applyFilter();
   }
 }
 
-async function scan(url, preferredPath) {
+async function scan(url, preferredPath, query) {
   document.body.dataset.state = "scanning";
   show($("error"), false);
   show($("result"), false);
@@ -292,7 +482,7 @@ async function scan(url, preferredPath) {
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "HTTP " + response.status);
     setBusy(false);
-    render(body, preferredPath);
+    render(body, preferredPath, query);
   } catch (error) {
     $("error").textContent = "error: " + error.message;
     show($("error"), true);
@@ -307,14 +497,14 @@ $("scan-form").addEventListener("submit", (event) => {
   const url = $("url").value.trim();
   if (!url) return;
   writeLocation(url, null);
-  scan(url, null);
+  scan(url, null, "");
 });
 
-// A link like /?url=https://github.com/owner/repo&skill=skills/pdf starts a scan right away.
+// A link like /?url=https://github.com/owner/repo&skill=skills/pdf&q=test starts a scan right away.
 const initial = new URLSearchParams(location.search);
 if (initial.get("url")) {
   $("url").value = initial.get("url");
-  scan(initial.get("url"), initial.get("skill"));
+  scan(initial.get("url"), initial.get("skill"), initial.get("q"));
 } else {
   document.body.dataset.state = "idle";
 }
