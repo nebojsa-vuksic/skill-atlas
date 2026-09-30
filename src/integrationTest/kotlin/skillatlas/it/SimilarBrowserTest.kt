@@ -109,6 +109,21 @@ class SimilarBrowserTest {
     }
 
     @Test
+    fun `clicking a similar skill that the filter hides clears the filter`() {
+        open("?url=github.com/acme/skills&q=tests&skill=skills/mps-tests")
+        assertThat(page.locator("[role=option]:visible")).hasCount(2)
+        assertThat(option("mps-aspect-typesystem")).isHidden()
+
+        rows.filter(Locator.FilterOptions().setHasText("mps-aspect-typesystem")).click()
+
+        assertThat(page.locator("#filter")).hasValue("")
+        assertThat(page.locator("[role=option]:visible")).hasCount(SIMILAR_SKILLS.size)
+        assertThat(option("mps-aspect-typesystem")).hasAttribute("aria-selected", "true")
+        assertThat(page.locator("#detail-name")).hasText("mps-aspect-typesystem")
+        assertTrue("q=" !in page.url(), page.url())
+    }
+
+    @Test
     fun `shows a message when there are no similar skills`() {
         open("?url=github.com/acme/skills&skill=skills/commits")
 
