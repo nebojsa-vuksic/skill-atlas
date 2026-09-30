@@ -32,28 +32,36 @@ data class ScanResponse(
         val warnings: List<String>,
         val content: String?,
         @SerialName("content_html") val contentHtml: String?,
+        val similar: List<SimilarJson>,
     )
+
+    @Serializable
+    data class SimilarJson(val path: String, val name: String, val score: Int)
 
     @Serializable
     data class IgnoredJson(val path: String, val reason: String)
 
     companion object {
-        fun of(result: ScanResult) = ScanResponse(
-            RepositoryJson(
-                name = result.repository.fullName,
-                description = result.repository.description,
-                branch = result.branch,
-                commit = result.commit,
-            ),
-            result.skills.map {
-                val content = result.contents[it.path]
-                SkillJson(
-                    it.name, it.description, shortenDescription(it.description), it.path, it.alsoAt, it.shipped, it.warnings,
-                    content, content?.let(SkillMarkdown::render),
-                )
-            },
-            result.ignored.map { IgnoredJson(it.path, it.reason) },
-        )
+        fun of(result: ScanResult): ScanResponse {
+            val similar = SkillSimilarity.compute(result.skills, result.contents)
+            return ScanResponse(
+                RepositoryJson(
+                    name = result.repository.fullName,
+                    description = result.repository.description,
+                    branch = result.branch,
+                    commit = result.commit,
+                ),
+                result.skills.map {
+                    val content = result.contents[it.path]
+                    SkillJson(
+                        it.name, it.description, shortenDescription(it.description), it.path, it.alsoAt, it.shipped, it.warnings,
+                        content, content?.let(SkillMarkdown::render),
+                        similar.getValue(it.path).map { s -> SimilarJson(s.path, s.name, s.score) },
+                    )
+                },
+                result.ignored.map { IgnoredJson(it.path, it.reason) },
+            )
+        }
     }
 }
 

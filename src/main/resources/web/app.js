@@ -304,6 +304,46 @@ function fixLinks(container, base) {
   }
 }
 
+// Lists the skills most like this one (spec section 5.6); the server computes the scores.
+function renderSimilar(skill) {
+  const rows = skill.similar.map((similar) => {
+    const row = element("button", "similar-row");
+    row.type = "button";
+    row.dataset.path = similar.path;
+    row.title = "Similarity " + similar.score + " %";
+    const bar = element("span", "similar-bar");
+    bar.setAttribute("aria-hidden", "true");
+    const fill = element("span", "similar-fill");
+    fill.style.width = similar.score + "%";
+    bar.append(fill);
+    row.append(
+      element("span", "similar-name", similar.name),
+      element("span", "similar-path", similar.path),
+      bar,
+      element("span", "similar-score", similar.score + " %"),
+    );
+    row.addEventListener("click", () => selectPath(similar.path));
+    return row;
+  });
+  $("similar-list").replaceChildren(...rows);
+  show($("no-similar"), rows.length === 0);
+}
+
+// Clears the filter (spec section 5.5), if there is one, so that every skill is listed again.
+function clearFilter() {
+  if ($("filter").value !== "") setFilter("");
+}
+
+// Selects the skill at a path, clearing the filter first if it hides that skill.
+function selectPath(path) {
+  if (!current) return;
+  const index = current.result.skills.findIndex((skill) => skill.path === path);
+  if (index < 0) return;
+  const item = items().find((option) => option.dataset.path === path);
+  if (!item || item.getClientRects().length === 0) clearFilter();
+  select(index, { focus: true });
+}
+
 function renderDetail(skill, repository) {
   const name = $("detail-name");
   name.textContent = skill.name;
@@ -316,6 +356,7 @@ function renderDetail(skill, repository) {
   $("detail-paths").replaceChildren(...paths(skill));
   const base = githubUrl(repository, skill.path);
   $("detail-github").href = base + "SKILL.md";
+  renderSimilar(skill);
 
   const hasContent = skill.content !== null;
   const rendered = $("rendered");
