@@ -1228,7 +1228,10 @@ A demo test must give the same pixels on every run.
 | Data | The stub GitHub API and fixture repositories from section 11.2, never live GitHub. The fixtures (`DemoFixtures`) model real cases under neutral names (section 13.3): `acme/agent-skills` has ordinary skills, `acme/workbench` has copies in `.agents` and `.claude` plus product copies, and `acme/agent-framework` has test fixtures. Git dates are fixed, so commit SHAs never change. |
 | Web browser | Playwright for Java, at the Chromium version its pinned release ships. Viewport 1280×800, device scale factor 1, light color scheme, locale `en-US`, time zone `UTC`. Animations disabled, and the text caret hidden in screenshots. |
 | Fonts | Inter (text) and JetBrains Mono (code), both SIL OFL, are committed in `src/integrationTest/resources/fonts/`. Web tests inject them with an `@font-face` style that overrides the page fonts (Playwright's `bypassCSP` allows this in tests only). Terminal tapes use `Set FontFamily "JetBrains Mono"`, installed from the same files. |
-| Terminal | VHS, with `ttyd` and `ffmpeg`, at pinned versions. 1400×820, font size 16, `Set Framerate 20`, and a fixed theme. Key moments wait for their text with `Wait+Screen /…/` before `Screenshot`, never on a fixed sleep alone. |
+| Terminal | VHS, with `ttyd` and `ffmpeg`, at pinned versions. 1400×820, font size 16, `Set Framerate 20`, and a fixed theme. A key moment that follows a command waits for the command's output with `Wait+Screen /…/`
+before `Screenshot`. A moment that follows only an in-process key, such as Tab completion,
+uses a fixed pause instead, because VHS can't read an interactive program's live input line.
+Every `Screenshot` is followed by `Sleep 1s`, because VHS captures it asynchronously. |
 | Operating system | Ubuntu, the CI runner. Font rendering differs between operating systems, so baselines are produced and compared on Linux only. |
 
 Nothing time-dependent appears in a key moment. The scan-counter status line, spinners,
@@ -1365,8 +1368,8 @@ imitation of a real person), with the caption bar of section 13.1's fonts.
   `narrate` notes the line's start time, then waits for its length plus 0.4 s. That keeps
   the voice in sync with the screen, and it never affects screenshots, because key moments
   are taken after narration has finished.
-- **Tapes** keep `# say:` comments (`demo/lib/tape-narration.mjs`). A `Wait` counts as zero
-  time, and the stubbed commands finish in well under a second.
+- **Tapes** keep `# say:` comments (`demo/lib/tape-narration.mjs`). A `Wait` counts as 1 s,
+  which is about how long a stubbed command takes, mostly the JVM starting.
 - **Without Kokoro,** narration lengths are estimated at 2.6 words per second, and the video
   has captions only.
 

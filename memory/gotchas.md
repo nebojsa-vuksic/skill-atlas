@@ -224,3 +224,28 @@ compositing.
 (`kokoro-v1.0.onnx`, 310 MB, and `voices-v1.0.bin`, 27 MB) come from the kokoro-onnx GitHub
 release. Each line takes about 1.3 s to render once the model is loaded, so load it once
 per demo (`kokoro_say.py` reads JSON on stdin).
+
+## VHS Wait+Screen reads the top of the buffer, and Screenshot is async (2026-09-30)
+
+With a program that prints scrollback (the shell), `Wait+Screen /x/` timed out on text
+near the bottom. Its error showed the first buffer line ("last value was: $ skill-atlas").
+`Wait` (line mode) saw an empty line. A `Screenshot` followed at once by `Type` captured
+the next keystroke.
+
+**How to apply:** `clear` before commands whose output you wait on. After in-process keys,
+use a short `Sleep`. Put `Sleep 1s` after every `Screenshot`. The shell palette shows at
+most 8 rows, so `/help` isn't visible after typing `/`.
+
+## Unquoted YAML descriptions containing ": " become invalid frontmatter (2026-09-30)
+
+"Use when defining generators: templates, …" parsed as a new key, and the skill showed
+`⚠ invalid frontmatter`. The parser was right, and the demo fixtures were wrong.
+
+**How to apply:** quote descriptions in fixtures, as `DemoFixtures.skill()` does.
+
+## GitHub Actions pushes with GITHUB_TOKEN don't start workflows (2026-09-30)
+
+The Update screenshots workflow commits baselines and then must start CI itself.
+
+**How to apply:** use `gh workflow run ci.yml --ref <branch>`, which needs
+`permissions: actions: write`. `ci.yml` has `workflow_dispatch` for this.

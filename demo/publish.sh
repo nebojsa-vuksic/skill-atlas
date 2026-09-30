@@ -25,7 +25,13 @@ WORK="$(mktemp -d)/demos"
 cleanup() { git -C "$ROOT" worktree remove --force "$WORK" 2>/dev/null || true; }
 trap cleanup EXIT
 
-if git -C "$ROOT" ls-remote --exit-code --heads origin demos >/dev/null 2>&1; then
+if [ "$FOLDER" = "latest" ]; then
+  # The latest demos are the only published state (spec section 13.7): a fresh orphan commit
+  # replaces the whole branch, so no older recording survives, not even in its history.
+  git -C "$ROOT" branch -D demos-latest >/dev/null 2>&1 || true
+  git -C "$ROOT" worktree add -q --orphan -b demos-latest "$WORK"
+  printf '# Demo recordings\n\nThe latest demos of `main`, recorded by CI (spec section 13).\nThis branch has a single commit; each run replaces it.\n' >"$WORK/README.md"
+elif git -C "$ROOT" ls-remote --exit-code --heads origin demos >/dev/null 2>&1; then
   git -C "$ROOT" fetch -q origin demos
   git -C "$ROOT" worktree add -q -B demos "$WORK" origin/demos
 else
@@ -34,7 +40,8 @@ else
   printf '# Demo recordings\n\nScripted demos for pull requests, one folder per PR (spec section 13).\nThis branch shares no history with `main`.\n' >"$WORK/README.md"
 fi
 
-rm -rf "$WORK/demos/$FOLDER"
+# `latest` is the only published state (spec section 13.7): everything older goes.
+if [ "$FOLDER" = "latest" ]; then rm -rf "$WORK/demos"; else rm -rf "$WORK/demos/$FOLDER"; fi
 for NAME in "$@"; do
   if [ "$#" -eq 1 ]; then DEST="$WORK/demos/$FOLDER"; else DEST="$WORK/demos/$FOLDER/$NAME"; fi
   mkdir -p "$DEST"
@@ -43,8 +50,12 @@ for NAME in "$@"; do
 done
 
 git -C "$WORK" add -A
-git -C "$WORK" commit -q -m "Demos in $FOLDER: $*"
-git -C "$WORK" push -q origin demos
+git -C "$WORK" commit -q -m "Demos in $FOLDER: $*${DEMO_SOURCE:+ (from $DEMO_SOURCE)}"
+if [ "$FOLDER" = "latest" ]; then
+  git -C "$WORK" push -q --force origin demos-latest:demos
+else
+  git -C "$WORK" push -q origin demos
+fi
 
 echo "publish: pushed demos/$FOLDER to the demos branch. Markdown:"
 echo

@@ -19,10 +19,11 @@ AGENTS.md; the checklist at the bottom mirrors it.
 ## Demo
 
 <!--
-Required when users can see the change (spec section 13). Record it with a script, never by hand:
-  demo/record.sh <name>              # writes build/demo/<name>/
-  demo/publish.sh <pr-number> <name> # pushes to the demos branch and prints the Markdown below
-Paste the printed Markdown here. Write "No visible change" if there's nothing to show.
+CI records every demo on every run (spec section 13). Link this PR's run: the `demos`
+artifact of its **Demos** job has the videos, screenshots, and any screenshot diffs.
+If the UI changed on purpose: add or adjust the demo's key moments (spec 13.3), run the
+**Update screenshots** workflow for this branch, and say why the baselines changed under
+"Decisions". Write "No visible change" if nothing users see changed.
 -->
 
 ## Testing
@@ -41,6 +42,6 @@ Paste the printed Markdown here. Write "No visible change" if there's nothing to
 
 - [ ] The spec is updated (or unchanged, because behavior didn't change)
 - [ ] `./gradlew build` passes locally, and no test was skipped, disabled, or loosened
-- [ ] The demo is recorded with `demo/record.sh` and published to the `demos` branch (or there's no visible change)
+- [ ] The **Demos** job is green: its screenshots match the baselines, or the baselines were updated on purpose (spec 13.5)
 - [ ] `memory/` is updated with the `shared-memory` skill if anything non-obvious was learned
 - [ ] CI is green on the latest commit, for both the `push` and `pull_request` runs

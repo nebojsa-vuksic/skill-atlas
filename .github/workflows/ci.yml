@@ -45,3 +45,48 @@ jobs:
           path: |
             build/reports/tests/
             build/test-results/
+
+  demos:
+    # Demo tests (spec section 13): narrated recordings and key-moment screenshot comparison.
+    name: Demos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: demos-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/demo-setup
+
+      - name: Record demos and compare key moments with the baselines
+        run: ./gradlew demoTest --no-daemon
+
+      - name: Narrate and encode the videos
+        if: always()
+        run: demo/finish-all.sh
+
+      - name: Upload the demos, screenshots and any diffs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demos
+          if-no-files-found: ignore
+          path: |
+            build/demo/*/*.mp4
+            build/demo/*/*.gif
+            build/demo/*/screenshots/
+            build/demo/*/expected/
+            build/demo/*/diff/
+            build/reports/tests/demoTest/
+
+      - name: Publish the latest demos to the demos branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEMO_SOURCE: ${{ github.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          demo/publish.sh latest $(cd build/demo && ls -d */ | tr -d /)
