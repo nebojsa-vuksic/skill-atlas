@@ -20,6 +20,8 @@ Kotlin/JVM CLI with four commands:
 - `scan`, with `--filter` and `--skill`
 - `browse`, a Mosaic terminal UI
 - `serve`, a local web view
+- `shell`, an interactive slash-command shell with a command palette, which is also what
+  `skill-atlas` with no arguments opens in a terminal
 
 ```
 ./gradlew build                       # everything: unit, CLI integration, pty and browser tests
