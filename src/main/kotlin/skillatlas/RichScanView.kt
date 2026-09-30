@@ -117,6 +117,13 @@ internal fun Report(result: ScanResult, columns: Int) {
                 SkillEntry(skill, descriptionLength)
             }
         }
+        if (result.ignored.isNotEmpty()) {
+            Text("")
+            Text(ignoredHeading(result.ignored.size), textStyle = TextStyle.Dim)
+            for (ignored in result.ignored) {
+                Text("  ${sanitize(ignored.path)}", textStyle = TextStyle.Dim)
+            }
+        }
     }
 }
 
@@ -132,6 +139,9 @@ private fun Field(label: String, value: @Composable () -> Unit) {
 private fun SkillEntry(skill: Skill, descriptionLength: Int) {
     Row {
         Text("● ${sanitize(skill.name)}", color = Color.Cyan, textStyle = TextStyle.Bold)
+        if (skill.shipped) {
+            Text("  ◆ $SHIPPED_LABEL", color = Color.Magenta)
+        }
         if (skill.warnings.isNotEmpty()) {
             Text("  ⚠ ${skill.warnings.joinToString(", ")}", color = Color.Yellow)
         }
@@ -143,4 +153,7 @@ private fun SkillEntry(skill: Skill, descriptionLength: Int) {
         Text("  $description")
     }
     Text("  ${sanitize(skill.path)}", textStyle = TextStyle.Dim)
+    for (copy in skill.alsoAt) {
+        Text("  also in ${sanitize(copy)}", textStyle = TextStyle.Dim)
+    }
 }

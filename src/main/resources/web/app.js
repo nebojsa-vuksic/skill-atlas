@@ -39,6 +39,7 @@ function renderSkill(skill) {
   item.dataset.path = skill.path;
 
   const name = element("h3", "skill-name", skill.name);
+  if (skill.shipped) name.append(element("span", "shipped", "◆ shipped in product"));
   for (const warning of skill.warnings) {
     name.append(element("span", "warning", "⚠ " + warning));
   }
@@ -52,6 +53,9 @@ function renderSkill(skill) {
   }
   item.append(description);
   item.append(element("div", "skill-path", skill.path));
+  for (const copy of skill.also_at) {
+    item.append(element("div", "skill-path also", "also in " + copy));
+  }
   return item;
 }
 
@@ -74,6 +78,12 @@ function render(result) {
   heading.classList.toggle("empty", count === 0);
 
   $("skills").replaceChildren(...result.skills.map(renderSkill));
+
+  const ignored = result.ignored;
+  $("ignored-heading").textContent = "Ignored " + ignored.length + " test " +
+    (ignored.length === 1 ? "fixture" : "fixtures") + " (not skills)";
+  $("ignored-list").replaceChildren(...ignored.map((entry) => element("li", "skill-path", entry.path)));
+  show($("ignored"), ignored.length > 0);
   show($("result"), true);
 }
 

@@ -13,7 +13,11 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 @Serializable
-data class ScanResponse(val repository: RepositoryJson, val skills: List<SkillJson>) {
+data class ScanResponse(
+    val repository: RepositoryJson,
+    val skills: List<SkillJson>,
+    val ignored: List<IgnoredJson>,
+) {
     @Serializable
     data class RepositoryJson(val name: String, val description: String?, val branch: String, val commit: String)
 
@@ -23,8 +27,13 @@ data class ScanResponse(val repository: RepositoryJson, val skills: List<SkillJs
         val description: String,
         @SerialName("short_description") val shortDescription: String,
         val path: String,
+        @SerialName("also_at") val alsoAt: List<String>,
+        val shipped: Boolean,
         val warnings: List<String>,
     )
+
+    @Serializable
+    data class IgnoredJson(val path: String, val reason: String)
 
     companion object {
         fun of(result: ScanResult) = ScanResponse(
@@ -34,7 +43,10 @@ data class ScanResponse(val repository: RepositoryJson, val skills: List<SkillJs
                 branch = result.branch,
                 commit = result.commit,
             ),
-            result.skills.map { SkillJson(it.name, it.description, shortenDescription(it.description), it.path, it.warnings) },
+            result.skills.map {
+                SkillJson(it.name, it.description, shortenDescription(it.description), it.path, it.alsoAt, it.shipped, it.warnings)
+            },
+            result.ignored.map { IgnoredJson(it.path, it.reason) },
         )
     }
 }

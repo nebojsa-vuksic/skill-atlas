@@ -182,3 +182,17 @@ button:disabled { opacity: 0.6; cursor: progress; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
 }
+
+.shipped {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--branch);
+  border-radius: 999px;
+  color: var(--branch);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ignored { margin-top: 28px; color: var(--muted); }
+.ignored h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.ignored ul { margin: 0; padding-left: 16px; }

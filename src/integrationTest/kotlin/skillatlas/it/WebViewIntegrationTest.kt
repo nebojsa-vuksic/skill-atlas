@@ -64,9 +64,11 @@ class WebViewIntegrationTest {
         assertEquals(
             """{"repository":{"name":"acme/skills","description":"Acme agent skills","branch":"main","commit":"$commit"},""" +
                 """"skills":[""" +
-                """{"name":"csv-tools","description":"","short_description":"","path":"skills/csv","warnings":["missing description"]},""" +
+                """{"name":"csv-tools","description":"","short_description":"","path":"skills/csv",""" +
+                """"also_at":[],"shipped":false,"warnings":["missing description"]},""" +
                 """{"name":"pdf-extract","description":"Extract text and tables from PDF files.",""" +
-                """"short_description":"Extract text and tables from PDF files.","path":"skills/pdf","warnings":[]}]}""",
+                """"short_description":"Extract text and tables from PDF files.","path":"skills/pdf",""" +
+                """"also_at":[],"shipped":false,"warnings":[]}],"ignored":[]}""",
             response.body,
         )
         assertEquals(1, sandbox.scanLogLines().size)

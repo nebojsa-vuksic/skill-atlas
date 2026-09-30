@@ -17,6 +17,10 @@ data class Skill(
     /** The skill's directory relative to the repository root, `.` for the root itself. */
     val path: String,
     val warnings: List<String> = emptyList(),
+    /** Other directories holding a byte-for-byte identical copy of this skill file (spec section 4.4). */
+    val alsoAt: List<String> = emptyList(),
+    /** True when a copy lives in a `resources` folder, so it ships with the product (spec section 4.4). */
+    val shipped: Boolean = false,
 )
 
 /** Reads a skill's name and description from its frontmatter (spec section 4.3). */

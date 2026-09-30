@@ -97,4 +97,47 @@ class TextReportTest {
         assertTrue('\u001B' !in report && '\u0007' !in report, report)
         assertTrue(report.contains("  evil[31m\n    red\n"), report)
     }
+
+    @Test
+    fun `shows copies, the product label and ignored test fixtures`() {
+        val result = ScanResult(
+            repository, "main", sha,
+            listOf(
+                Skill(
+                    "mps-tests", "Write MPS tests.", ".agents/skills/mps-tests", listOf("duplicate name"),
+                    alsoAt = listOf(".claude/skills/mps-tests", "plugins/p/resources/skills/mps-tests"),
+                    shipped = true,
+                ),
+            ),
+            listOf(IgnoredSkill("src/jvmTest/resources/skills/weather", "test data")),
+        )
+
+        assertEquals(
+            """
+            Repository:  anthropics/skills
+            Description: Public repository for Agent Skills
+            Commit:      $sha (main)
+
+            Found 1 skill:
+
+              mps-tests  [shipped in product]  [warning: duplicate name]
+                Write MPS tests.
+                .agents/skills/mps-tests
+                also in .claude/skills/mps-tests
+                also in plugins/p/resources/skills/mps-tests
+
+            Ignored 1 test fixture (not skills):
+              src/jvmTest/resources/skills/weather
+
+            """.trimIndent(),
+            TextReport.render(result),
+        )
+    }
+
+    @Test
+    fun `lists ignored fixtures even when no skills are found`() {
+        val result = ScanResult(repository, "main", sha, emptyList(), listOf(IgnoredSkill("tests/a", "test data"), IgnoredSkill("tests/b", "test data")))
+
+        assertTrue(TextReport.render(result).endsWith("No skills found.\n\nIgnored 2 test fixtures (not skills):\n  tests/a\n  tests/b\n"))
+    }
 }

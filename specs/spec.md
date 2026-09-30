@@ -125,6 +125,41 @@ Each skill result contains:
 | `path` | string | Path of the skill's directory relative to the repository root (`.` for the root) |
 | `warnings` | string[] | Problems found while parsing; empty when none |
 
+### 4.4 Duplicates, product skills, and test data
+
+Real repositories keep skill files in more places than one skills folder. After parsing,
+each skill file is classified by the folders **above** its skill directory. The skill's
+own directory name never counts, so a skill called `tests` is still a skill.
+
+| Location | Rule | Example | Result |
+|----------|------|---------|--------|
+| Test data | A parent folder is `test`, `tests`, `testdata`, `test-data`, `fixtures`, `__fixtures__` or `__tests__` (case-insensitive), or a folder directly under `src` whose name contains `test` (`src/test`, `src/jvmTest`, `src/integrationTest`, `src/testFixtures`) | JetBrains/koog `integration-tests/src/jvmTest/resources/skills/weather-retrieval` | **Not a skill.** Listed separately as an ignored test fixture |
+| Product | Otherwise, a parent folder is `resources` | JetBrains/MPS `plugins/mcp-tools/resources/…/skills/mps-aspect-generator` | Listed, labeled **shipped in product** |
+| Agent configuration | Otherwise, the first folder starts with `.` | `.agents/skills/…`, `.claude/skills/…` | Listed |
+| Repository | Anything else | JetBrains/android `agent/skills/writing-lint-checks` | Listed. An unusual folder is still the repository's own skill |
+
+**Identical copies are one skill.** Skill files with byte-for-byte identical content
+(same SHA-256) are merged into a single entry. For example, JetBrains/MPS
+`.agents/skills/mps-tests/SKILL.md` and `.claude/skills/mps-tests/SKILL.md` become one
+`mps-tests` entry.
+
+- **Main path:** the copy with the highest-priority location, in the order agent
+  configuration, repository, product. Ties go to the alphabetically first path, so
+  `.agents/…` wins over `.claude/…`.
+- **Other copies:** listed as `also in <path>`, in that same order.
+- **Product label:** the entry is labeled *shipped in product* if any copy is a product
+  location.
+- **Not merged:** files over 1 MB or unreadable files are never merged.
+- **Test data first:** test data is removed before merging, so a fixture never
+  becomes a copy of a real skill.
+
+**Same name, different content.** If two different skills end up with the same `name`,
+both are listed, and each gets the warning `duplicate name`.
+
+Real-world outcome: JetBrains/MPS has 114 `SKILL.md` files. They are reported as
+**41 skills**: every skill has an identical `.claude` copy, and 32 of them are also
+shipped in `plugins/mcp-tools/resources`.
+
 ## 5. Output
 
 The report goes to **stdout**. Errors and warnings go to **stderr**.
@@ -184,6 +219,9 @@ Each part of the report is highlighted:
 | Skill description | default color; `(no description)` in dim |
 | Skill path | dim |
 | Warnings (`⚠ …`) | yellow |
+| `◆ shipped in product` | magenta |
+| `also in <path>` lines | dim |
+| Ignored test fixtures heading and paths | dim |
 
 If the terminal does not support color, Mosaic falls back to plain text with the same
 layout.
@@ -210,10 +248,28 @@ Found 3 skills:
     skills/csv-tools
 ```
 
+With the cases from section 4.4 (identical copies, a product copy, a test fixture):
+
+```
+  mps-tests  [shipped in product]
+    Use when writing or modifying tests inside MPS models.
+    .agents/skills/mps-tests
+    also in .claude/skills/mps-tests
+    also in plugins/mcp-tools/resources/jetbrains/mps/agents/mcp/skills/mps-tests
+
+Ignored 1 test fixture (not skills):
+  integration-tests/src/jvmTest/resources/skills/weather-retrieval
+```
+
 Rules:
 - `Description:` shows `(none)` when the repository has no description.
 - `Commit:` shows the full SHA, followed by the default branch name in parentheses.
 - When no skills are found, the header is followed by `No skills found.`
+- Tags follow the skill name in this order: `[shipped in product]`, then `[warning: …]`.
+- Each identical copy adds an `also in <path>` line under the main path.
+- If test fixtures were ignored, the report ends with a blank line, then
+  `Ignored <n> test fixture(s) (not skills):`, then one indented path per fixture. This
+  also appears after `No skills found.`
 - Progress messages (`Fetching metadata for owner/repo...`, `Cloning owner/repo (main)...`)
   go to stderr.
 
@@ -261,6 +317,9 @@ same highlights as the rich terminal view:
 | Skill description | the shortened form (section 5.3); the full text is shown on hover |
 | Skill path | muted monospace |
 | Warnings | amber `⚠ …` badges |
+| Shipped in product | `◆ shipped in product` pill with a magenta outline |
+| Identical copies | muted `also in <path>` lines |
+| Ignored test fixtures | a muted list under the skills |
 
 Errors are shown as `error: <message>`, using the same messages as section 7. Opening
 `/?url=<repository-url>` starts a scan right away. The page follows the system's light
@@ -272,8 +331,10 @@ or dark color scheme and works at phone widths.
 {
   "repository": {"name": "acme/skills", "description": "Acme agent skills", "branch": "main", "commit": "<sha>"},
   "skills": [
-    {"name": "pdf-extract", "description": "<full>", "short_description": "<shortened>", "path": "skills/pdf", "warnings": []}
-  ]
+    {"name": "pdf-extract", "description": "<full>", "short_description": "<shortened>", "path": "skills/pdf",
+     "also_at": [], "shipped": false, "warnings": []}
+  ],
+  "ignored": [{"path": "src/test/resources/skills/demo", "reason": "test data"}]
 }
 ```
 
@@ -367,6 +428,9 @@ skill (section 4.3).
 10. No skill description in either format is longer than 100 characters plus `…`.
 11. `skill-atlas serve` shows the same results in a browser at `http://127.0.0.1:8421/`,
     with the highlights from section 5.4.
+12. JetBrains/MPS is reported as 41 skills with their `.claude` and product copies
+    merged; JetBrains/koog's test fixtures are ignored; JetBrains/android's
+    `agent/skills` are listed (section 4.4).
 
 ## 11. Testing
 
@@ -434,6 +498,12 @@ They are meant for tests only.
 | Piped stdout | No escape codes anywhere in the output |
 | Rich view in a pseudo-terminal | Escape codes are present, and the report text matches section 5.1 |
 | Ctrl-C while fetching metadata, in the rich view | Exit `130`, `error: scan interrupted`, temp directory removed |
+| Identical copies in `.agents` and `.claude` (MPS) | One entry, main path `.agents/…`, `also in .claude/…` |
+| Unusual folder `agent/skills` (android) | Listed like any other skill |
+| Copy under `plugins/…/resources/…` (MPS) | Merged into the same entry; labeled shipped in product |
+| Fixture under `src/jvmTest/resources` (koog) | Not listed as a skill; shown under the ignored test fixtures |
+| Same name, different content | Both listed with `duplicate name` |
+| The same edge cases through the web API | Exact `also_at`, `shipped` and `ignored` JSON |
 | `serve --port 0` | Prints the URL. `GET /` returns the page; `/app.js` and `/style.css` return the assets |
 | Web API scan | Exact JSON body; one scan log line; temp directory removed |
 | Web API errors | Invalid URL `400`, unknown repository `404`, missing `url` `400`; exact JSON bodies |

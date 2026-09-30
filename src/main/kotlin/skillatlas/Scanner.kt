@@ -27,8 +27,8 @@ class Scanner(
             progress("Cloning ${metadata.fullName} ($branch)...")
             git.shallowClone(cloneUrl(repository), branch, checkout, repository)
             val commit = git.headCommit(checkout)
-            val skills = SkillScanner.discover(checkout).map { SkillParser.parse(checkout, it, repository.name) }
-            ScanResult(metadata, branch, commit, skills)
+            val catalog = SkillCatalog.build(checkout, SkillScanner.discover(checkout), repository.name)
+            ScanResult(metadata, branch, commit, catalog.skills, catalog.ignored)
         }
     }
 
