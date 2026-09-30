@@ -142,3 +142,13 @@ from `/api/scan` to `/api/scans` broke it, as intended.
 
 **How to apply:** when a test fails because behavior changed on purpose, update the
 assertion and say why in its message. Only do this when the spec changed too.
+
+## Subagent worktrees live inside the repository (2026-09-30)
+
+Claude Code creates subagent worktrees under `.claude/worktrees/<agent>/`. A plain
+`git add -A` then stages them as embedded repositories (gitlinks).
+
+**Why:** the multi-repo commit picked one up and pushed it. A follow-up commit removed it.
+**How to apply:** `.claude/worktrees/` is in `.gitignore` now. Check `git status --short`
+before committing when a subagent is running. Never delete that directory while its agent
+is working.
