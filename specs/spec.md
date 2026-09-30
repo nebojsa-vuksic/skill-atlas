@@ -27,12 +27,18 @@ skill-atlas scan <github-project-url>
 ### 3.1 Synopsis
 
 ```
+skill-atlas
+skill-atlas shell
 skill-atlas scan <github-project-url> [--filter <words>] [--skill <name-or-path>]
 skill-atlas browse <github-project-url>
 skill-atlas serve [--port <port>]
 skill-atlas --help
 skill-atlas --version
 ```
+
+`skill-atlas` with no arguments opens the interactive shell (section 5.9) when stdin and
+stdout are both terminals. Otherwise it prints the usage to stderr and exits `2`, as
+before.
 
 ### 3.2 Arguments
 
@@ -695,6 +701,140 @@ the skill is still visible, and otherwise selects the first visible skill. Only
 printable ASCII characters can be typed into the filter, because that's what Mosaic
 reports as keys. Quitting puts the terminal back as it was and exits `0`.
 
+### 5.9 Interactive shell (`shell`)
+
+`skill-atlas shell`, or `skill-atlas` with no arguments in a terminal, opens an
+interactive shell in the style of the Claude Code CLI. You type slash commands at a
+prompt, with a command palette that filters as you type. The shell keeps one scanned
+repository, the **current repository**, which the other commands work on. It is built
+with Mosaic, and it uses the same core and the same rich renderers as `scan` (sections
+5.1 and 5.7).
+
+- **Needs a terminal.** If stdin or stdout isn't a terminal, `shell` exits `2` with
+  `error: shell needs an interactive terminal; use "skill-atlas scan" instead`. Without
+  a terminal, `skill-atlas` with no arguments prints the usage and exits `2` (section 3.1).
+- **Scrollback and live area.** Only the prompt and the palette are live, at the bottom
+  of the terminal. Everything a command prints goes above them as permanent scrollback,
+  printed once through Mosaic's static output. Each command is first echoed there as a
+  dim `❯ <input>` line, and each command's output is followed by a blank line, so the
+  scrollback reads like a transcript.
+
+```
+❯ /scan https://github.com/anthropics/skills
+  SKILL ATLAS
+
+ Repository   anthropics/skills
+ …
+
+❯ /s█
+▸ /scan <url>              Scan a GitHub repository and make it the current one
+  /skill <name-or-path>    Show one skill: description, paths, similar skills, SKILL.md
+  /similar <name-or-path>  Show the skills most similar to one skill
+  /serve [port]            Start the web view in the background; /serve stop stops it
+```
+
+**Prompt.** A bold cyan `❯ `, then the input with a block cursor (inverted). While the
+input is empty, the dim hint `type / for commands` follows the cursor. Input that is too
+wide for the terminal scrolls sideways to keep the cursor visible, with `…` at the start.
+
+**Command palette.** When the input starts with `/` and has no space yet, a list of
+matching commands appears under the prompt. Each row shows the command, its arguments,
+and a dim one-line description.
+
+- **Matching:** the text after `/` is matched against command names, ignoring case. An
+  exact match comes first, then names that start with the text, then names that contain
+  it. Within each group, commands keep the order of the table below. The matched part of
+  each name is highlighted black on yellow. With only `/` typed, every command is listed.
+- **Rows:** `▸ ` on the selected row and two spaces on the others, so the commands line
+  up with the input. Then the command and its arguments, padded to the widest one in the
+  list plus two spaces, then the description. Rows are cut with `…` to fit the width.
+- **Selection:** the first row is selected, shown with a cyan `▸` and a bold cyan name.
+  ↑ and ↓ move it and stop at the ends. Editing the input selects the first row again.
+- **Size:** at most 8 rows are shown. The list scrolls to keep the selection visible.
+- **Closing:** Esc closes the palette until the input is edited again. When nothing
+  matches, the palette is hidden.
+- **Tab** completes the selected command into the input: `/<name> ` with a trailing space
+  for commands that take an argument, `/<name>` otherwise.
+- **Enter** runs the selected command. If the command needs an argument, Enter completes
+  it like Tab instead.
+
+**Skill names.** Once there is a current repository, typing `/skill ` or `/similar `
+(for example after completing it with Tab) opens the same palette with the repository's
+skills. Each row shows a skill name and its shortened description (section 5.3), matched
+and ranked against the text after the space by the same rules as commands. A name that
+several skills share is offered as each skill's path instead, so every suggestion is
+unambiguous. Tab completes the selection into the input, and Enter runs the command on
+it. If nothing matches, for example because a path was typed, the palette is hidden and
+Enter runs the input as typed.
+
+**Commands:**
+
+| Command | Needs a repository | Effect |
+|---------|--------------------|--------|
+| `/scan <url>` | no | Scans like `scan` and makes the result the current repository. Prints the rich report (section 5.1). |
+| `/filter <words>` | yes | Lists the matching skills, like `scan --filter`, in the rich view (section 5.7). Without words, lists every skill. |
+| `/skill <name-or-path>` | yes | Shows one skill, like `scan --skill` (section 5.7). |
+| `/similar <name-or-path>` | yes | Shows only that skill's similar-skills table: `Similar to <name>`, then the rows of section 5.7. |
+| `/browse` | yes | Opens the full-screen `browse` view (section 5.8) on the current repository. `q` or Ctrl-C returns to the shell. |
+| `/repo` | yes | Shows the current repository's summary: name, description, commit and branch, and the skill count. |
+| `/serve [port]` | no | Starts the web view (section 5.4) in the background, on port `8421` unless given, `0` for any free port, and prints `Skill Atlas web view: <url>`. `/serve stop` stops it. |
+| `/log` | no | Shows the last 10 entries of the scan log (section 6), oldest first, one per line: time (dim), repository (bold cyan), the first 12 characters of the commit (yellow), branch (magenta), and `<n> skills`, in aligned columns. `No scans logged yet.` when the log is empty or missing. |
+| `/help` | no | Lists the commands and the keys. |
+| `/quit` | no | Leaves the shell. |
+
+- **No repository yet.** A command that needs a repository says
+  `No repository yet — run /scan <url> first.` in yellow, and does nothing else.
+- **Missing arguments.** `/scan`, `/skill` and `/similar` without an argument print
+  `error: usage: /<command> <argument>`, e.g. `error: usage: /scan <url>`.
+- **Unknown commands** print `error: unknown command /<name>; type /help for the list`.
+- **Text without `/`.** Enter on input that doesn't start with `/` is a `/filter` with
+  that text on the current repository. Without a repository it prints the
+  "No repository yet" message.
+- **`/serve`.** If the web view is already running, `/serve` prints
+  `The web view is already running: <url>`. `/serve stop` prints `Stopped the web view.`,
+  or `The web view isn't running.` A port outside 0 to 65535, or any other argument,
+  prints `error: usage: /serve [port] or /serve stop`. A taken port prints
+  `error: could not listen on 127.0.0.1:<port>: <reason>`. Leaving the shell stops the
+  web view. Its scans append to the scan log, as with `serve`.
+
+**Keys at the prompt:**
+
+| Key | Effect |
+|-----|--------|
+| printable characters | Insert at the cursor |
+| Backspace / Delete | Delete the character before / under the cursor |
+| ← / →, Home / End, Ctrl-A / Ctrl-E | Move the cursor |
+| Ctrl-U | Delete everything before the cursor |
+| ↑ / ↓ | Palette open: move the selection. Palette closed: walk the input history |
+| Tab | Palette open: complete the selection |
+| Enter | Palette open: run (or complete) the selection. Otherwise: run the input |
+| Esc | Close the palette |
+| Ctrl-C | Clear the input; on an empty input, quit |
+| Ctrl-D | On an empty input, quit |
+
+- **History.** Every non-empty input that is run is added to this session's history,
+  except a repeat of the previous entry. ↑ steps back through it, ↓ forward, and going
+  past the newest entry brings back what was typed before walking the history. A
+  recalled input keeps the palette closed until it is edited, so ↑ and ↓ keep walking
+  the history. The history is not saved between sessions.
+- **Characters.** Any printable character can be typed, including non-ASCII ones such as
+  `é` or a pasted `—`. Mosaic only reports printable ASCII and its named keys, and ends
+  the program on anything else, so the shell reads the terminal's key events itself and
+  passes only those keys on to Mosaic. Other keys, such as ones with no name, are
+  ignored.
+
+**Running commands.**
+- **Scanning.** During `/scan`, the prompt is replaced by the spinner status line of
+  section 5.1. Other keys are ignored while it runs. Ctrl-C cancels just that scan: it
+  prints `error: scan interrupted`, keeps the previous current repository, and returns
+  to the prompt.
+- **Errors.** The messages of section 7 are printed inline as `error: <message>` in red,
+  and the shell keeps running. Exit codes don't apply inside the shell.
+- **Scan log.** Each successful `/scan` appends one line to the scan log (section 6). If it
+  can't be written, the warning is printed inline in yellow.
+- **Leaving.** `/quit`, Ctrl-D on an empty input, or Ctrl-C on an empty input stops the
+  web view if it runs, puts the terminal back as it was, and exits `0`.
+
 ## 6. Scan log
 
 Every successful scan is logged, in addition to the report on stdout.
@@ -723,6 +863,10 @@ Every successful scan is logged, in addition to the report on stdout.
 | `5` | Network or GitHub API failure, including rate limiting | `error: GitHub API rate limit exceeded; set GITHUB_TOKEN to raise the limit` |
 | `6` | `--skill` names no skill in the repository | `error: no skill 'pdf' in owner/repo` |
 | `130` | Interrupted with Ctrl-C | `error: scan interrupted` |
+
+`browse` and `shell` exit `2` when stdin or stdout isn't a terminal (sections 5.8 and
+5.9). The shell exits `0` when it is left. Inside the shell, errors are printed inline
+and don't end it; Ctrl-C during a `/scan` cancels only that scan.
 
 Problems in individual skill files are never errors. They show up as warnings on that
 skill (section 4.3).
@@ -780,6 +924,16 @@ skill (section 4.3).
     GitHub link, similar skills with bars, and its exact `SKILL.md` (section 5.7).
 18. `browse <url>` shows the filterable list and the selected skill side by side in the
     terminal, with the keys from section 5.8.
+19. `skill-atlas` with no arguments, in a terminal, opens the shell of section 5.9;
+    without a terminal it prints the usage and exits `2`. `skill-atlas shell` without a
+    terminal exits `2` with the message from section 5.9.
+20. In the shell, typing `/` opens the command palette; it filters and highlights as you
+    type, ↑/↓ select, Tab completes and Enter runs (section 5.9).
+21. `/scan <url>` in the shell makes that repository current; `/filter`, `/skill`,
+    `/similar`, `/repo` and `/browse` then work on it, and Tab after `/skill ` completes
+    its skill names. Each successful `/scan` appends one scan log line.
+22. Errors inside the shell are printed inline in red and the shell keeps running;
+    Ctrl-C cancels a running `/scan` only.
 
 ## 11. Testing
 
@@ -870,6 +1024,16 @@ They are meant for tests only.
 | `browse` state | Unit tests for the three focus areas and every key in section 5.8, selection while filtering, and scrolling |
 | `browse` screen | Mosaic snapshot tests of the rendered frame at a fixed size |
 | `browse` in a pseudo-terminal | Scripted keys (type a filter, move, jump to a similar skill, quit), waiting for markers on screen; exit `0`; one scan log line |
+| `skill-atlas` with no arguments, without a terminal | Exit `2`; the usage on stderr; stdout empty |
+| `shell` without a terminal | Exit `2` and the exact message; no scan log |
+| `shell` palette | Unit tests: exact, prefix and substring ranking, case-insensitivity, highlight ranges, the 8-row window |
+| `shell` completion | Unit tests: commands with and without arguments, skill names after `/skill ` and `/similar `, shared names offered as paths, no suggestions without a repository |
+| `shell` history | Unit tests: walking back and forward, the saved draft, skipped repeats and blank inputs |
+| `shell` keys | Unit tests for every key in section 5.9, with the palette open and closed |
+| `shell` commands | Unit tests: every command's output, "No repository yet", usage and unknown-command errors, text without `/` |
+| `shell` screen | Mosaic snapshot tests of the prompt with its hint, the open palette, and the filtered palette with highlights |
+| `shell` in a pseudo-terminal | Type `/sc`, Tab, a URL, Enter; wait for the report; `/filter tests`; `/skill ` with a Tab-completed skill name; `/quit`; exit `0`; exactly one scan log line |
+| `shell` Ctrl-C during a scan | The scan is cancelled with `error: scan interrupted`, the shell keeps running, and `/quit` exits `0` with no scan log line |
 | `serve --port 0` | Prints the URL. `GET /` returns the page; `/app.js` and `/style.css` return the assets |
 | Web API scan | Exact JSON body; one scan log line; temp directory removed |
 | Web API errors | Invalid URL `400`, unknown repository `404`, missing `url` `400`; exact JSON bodies |

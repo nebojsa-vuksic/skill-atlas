@@ -21,6 +21,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.mosaic.runtime)
     implementation(libs.mosaic.tty)
+    // The shell binds the terminal itself, to keep keys Mosaic can't name from ending it.
+    implementation(libs.mosaic.tty.terminal)
     implementation(libs.commonmark)
     implementation(libs.commonmark.tables)
 
