@@ -329,30 +329,49 @@ or dark color scheme and works at phone widths.
 pane:
 
 ```
-┌──────────────────────────┬─┬──────────────────────────────────────────────┐
-│ ● commits                │ │ mps-aspect-generator  ◆ shipped in product   │
-│   How to write commit…   │ │ Use when defining or modifying MPS generat…  │
-│   .agents/skills/commits │ │ .agents/skills/mps-aspect-generator          │
-├──────────────────────────┤ │ also in .claude/skills/mps-aspect-generator  │
-│▌● mps-aspect-generator   │ │ View on GitHub ↗                              │
-│▌  Use when defining or…  │ │ [ Rendered | Raw ]                            │
-│▌  .agents/skills/mps-…   │ │ ─────────────────────────────────────────────│
-├──────────────────────────┤ │ # MPS generators                              │
-│ ● mps-tests              │ │ …the skill file's content…                    │
-└──────────────────────────┴─┴──────────────────────────────────────────────┘
-   skill list (left)       divider       selected skill (right)
+┌────────────────────────────────┬─┬──────────────────────────────────────────────┐
+│ 🔍 test                 5 of 41 │ │ mps-tests  ◆ shipped in product               │
+├────────────────────────────────┤ │ Use when writing or modifying tests inside…   │
+│ mps-aspect-typesystem           │ │ .agents/skills/mps-tests                      │
+│ …WhenConcrete test statement…   │ │ also in .claude/skills/mps-tests              │
+│                                 │ │ View on GitHub ↗                              │
+│ mps-build-language              │ │                                               │
+│ …module tests, or run code…     │ │ Similar skills                                │
+│                                 │ │ mps-run-configurations   ▓▓▓▓▓▓░░░░   62 %    │
+│▌mps-tests                  ◆    │ │ mps-aspect-typesystem    ▓░░░░░░░░░   12 %    │
+│▌Use when writing or modifyi…   │ │                                               │
+│                                 │ │ [ Rendered | Raw ]                            │
+│                                 │ │ # MPS tests …                                 │
+└────────────────────────────────┴─┴──────────────────────────────────────────────┘
+   filter + skill list (left)     divider       selected skill (right)
 ```
 
-- **Left, the skill list.** Each skill is one item, with the same content and styles as
-  in the table above. Items are buttons. Clicking an item, or pressing Enter or Space,
-  selects it. ↑ and ↓ move the selection. The selected item is highlighted with the
-  accent color and marked `aria-selected="true"`. The list scrolls on its own.
+- **Left, the skill list.** The filter field (section 5.5) sits at the top of the left
+  pane and stays visible while the list scrolls. Items are buttons. Clicking an item, or
+  pressing Enter or Space, selects it. ↑ and ↓ move the selection. The list scrolls on
+  its own.
+
+  **List items are compact.** Each item shows only two things:
+  - **Name:** one line, bold, cut with `…` if too long.
+  - **Short description:** at most two lines, muted, and `(no description)` when
+    missing.
+
+  Paths, `also in` copies, and full labels appear only in the right pane. In the list,
+  labels shrink to small icons at the right end of the name line, each with a tooltip:
+  - `◆` for *shipped in product*
+  - `⚠` for warnings, with the warnings as the tooltip
+  - `⧉ <n>` when the skill has `<n>` identical copies
+
+  Items are separated by a thin line instead of each having a border, with 12 px of
+  vertical padding. Hovering an item tints its background. The selected item gets a 3 px
+  accent bar on the left, a tinted background, and `aria-selected="true"`.
 - **Right, the selected skill.** This pane shows:
   - the skill name and its badges
   - the **full** description, not the shortened one
   - the main path and its `also in` copies
   - a **View on GitHub** link to
     `https://github.com/<repository>/blob/<commit>/<path>/SKILL.md`
+  - the **Similar skills** section (section 5.6)
   - the skill file's content, in two tabs:
     - **Rendered** (the default): the Markdown after the frontmatter, rendered as
       CommonMark with GitHub-style tables.
@@ -365,8 +384,9 @@ pane:
   keeps at least 240 px. The left pane starts at 38 % of the width, and the chosen width
   is remembered in the browser.
 - **Selection.** After a scan, the first skill is selected. The selected skill's path is
-  kept in the page URL as `&skill=<path>`, so a link reopens the same repository with
-  the same skill selected.
+  kept in the page URL as `&skill=<path>`, and the filter as `&q=<query>`. A link
+  therefore reopens the same repository with the same filter and the same skill
+  selected.
 - **Narrow screens.** Below 760 px wide, the panes stack: the list comes first, then the
   selected skill. Selecting an item scrolls the skill into view.
 - **Ignored test fixtures** stay listed below the split pane, and they can't be selected.
@@ -392,7 +412,8 @@ Markdown is rendered on the server, with these rules:
   "skills": [
     {"name": "pdf-extract", "description": "<full>", "short_description": "<shortened>", "path": "skills/pdf",
      "also_at": [], "shipped": false, "warnings": [],
-     "content": "---\nname: pdf-extract\n…", "content_html": "<h1>PDF</h1>\n…"}
+     "content": "---\nname: pdf-extract\n…", "content_html": "<h1>PDF</h1>\n…",
+     "similar": [{"path": "skills/docx", "name": "docx", "score": 31}]}
   ],
   "ignored": [{"path": "src/test/resources/skills/demo", "reason": "test data"}]
 }
@@ -422,6 +443,81 @@ Every successful scan made through the API appends one line to the scan log.
 - It answers only `GET`; other methods get `405`.
 - It serves a strict `Content-Security-Policy` (`default-src 'self'`).
 - The page inserts repository content as text, never as HTML.
+
+### 5.5 Filter
+
+The filter narrows the skill list in the web view by words in the skills' names and
+descriptions. It runs in the page and needs no API call.
+
+- **Field.** A search field with a 🔍 icon and the placeholder `Filter skills` sits at the
+  top of the left pane. On its right, a count pill shows `<visible> of <total>`, e.g.
+  `5 of 41`. The pill is accent-colored while a filter is active and muted otherwise.
+- **Matching:**
+  - The query is split on whitespace into words.
+  - Matching is case-insensitive.
+  - A skill matches when **every** word is a substring of its name or of its **full**
+    description.
+  - An empty query shows every skill.
+  - The list updates on every keystroke and keeps the original order.
+- **Highlighting.** Matched text is wrapped in `<mark>` in each visible item's name and
+  description line. If a word matches only past the shortened description, the item's
+  description line switches to a snippet around the first match: up to 40 characters
+  on each side, cut at word boundaries, with `…` where text was left out, e.g.
+  `…WhenConcrete test statement…`.
+- **Selection:**
+  - If the selected skill is filtered out, the first visible skill is selected.
+  - If nothing matches, the list shows `No skills match "<query>".` and the right pane
+    shows nothing.
+  - Clearing the filter keeps the current selection.
+- **Keyboard:**
+  - `/` focuses the field when focus isn't already in a text field.
+  - Escape in the field clears it.
+  - ↓ in the field moves focus to the selected item.
+- **URL.** The query is kept as `&q=<query>`, so a link reopens the same filter.
+
+### 5.6 Similar skills
+
+The right pane lists the skills that are most similar to the selected one. Similarity
+is a **deterministic heuristic, not AI**: TF-IDF cosine similarity over words. The server
+computes it once per scan, over the listed skills of that repository.
+
+**Words.** Each skill's text is its name, its full description, and the first 20,000
+characters of its `SKILL.md` body (the Markdown after the frontmatter).
+
+- The text is lowercased and split on anything that isn't a letter or digit, so
+  `mps-tests` gives `mps` and `tests`.
+- Dropped: words shorter than 3 characters, words made only of digits, and words in a
+  fixed English stopword list (`the`, `and`, `when`, `use`, `with`, `this`, `that`,
+  `for`, `from`, `you`, `your`, …).
+- A trailing `s` is removed from words longer than 4 characters that don't end in `ss`,
+  so `tests` and `test` count as the same word.
+
+**Weights:**
+- Where a word appears changes how much it counts: a name word counts 3, a description
+  word 2, and a body word 1. These add up to the word's weight in the skill.
+- Each weight is multiplied by `idf = ln((N + 1) / (df + 1)) + 1`, where `N` is the
+  number of listed skills and `df` is the number of skills that contain the word.
+- Two skills' similarity is the cosine of their weighted word vectors, from 0 to 1.
+
+**Result.** Each skill lists at most 5 other skills with a similarity of at least 0.05,
+sorted by similarity (highest first), then by path. The score is shown as a whole
+percentage, `round(similarity × 100)`. Identical copies were already merged (section
+4.4), so a skill never lists its own copies.
+
+**Web view.** The *Similar skills* section sits in the right pane, between the GitHub link
+and the content tabs.
+- **Rows.** Each row shows the other skill's name (bold), its path (muted, monospace), a
+  bar filled to the score, and the percentage, e.g. `62 %`.
+- **Clicking a row** selects that skill. If the filter hides it, the filter is cleared
+  first.
+- **No similar skills:** the section shows `No similar skills found.`
+
+**API.** Each skill in `GET /api/scan` gets
+`"similar": [{"path": "<path>", "name": "<name>", "score": <whole percent>}]`, in the
+order above. The list is empty when there are no similar skills.
+
+**Performance.** Vectors are sparse, and every pair is compared once. A repository with
+500 skills must finish this step in under 1 second.
 
 ## 6. Scan log
 
@@ -497,6 +593,10 @@ skill (section 4.3).
     `agent/skills` are listed (section 4.4).
 13. In the web view, clicking any skill in the left list shows that skill's content in
     the right pane (section 5.4).
+14. Typing words into the filter shows only the skills whose name or description
+    contains all of them, with the count `n of total` (section 5.5).
+15. The right pane lists up to 5 similar skills with percentages, computed by the
+    deterministic heuristic in section 5.6. Clicking one selects it.
 
 ## 11. Testing
 
@@ -573,6 +673,12 @@ They are meant for tests only.
 | Web API skill content | Exact `content` and `content_html`; raw `<script>` is escaped; `javascript:` links are removed |
 | Browser: split pane | Clicking a list item selects it and shows its full description, paths, GitHub link, and rendered content on the right |
 | Browser: keyboard and tabs | ↓ selects the next skill; the Raw tab shows the exact file text; `&skill=` in the URL reopens the selection |
+| Browser: compact list items | Items show only the name and at most two description lines; paths appear only in the right pane; icons `◆`, `⚠` and `⧉ n` have tooltips |
+| Browser: filter | Typing `test` shows only matching skills in their original order, `<mark>`s the matches, and updates the count pill (`n of total`); a word found only in the full description shows a snippet; no match shows the empty message; Escape clears; `&q=` reopens the filter |
+| Browser: filter and selection | Filtering out the selected skill selects the first visible one |
+| Similar skills: heuristic | Fixed fixture skills give exact scores and order; stopwords, short words and digits are ignored; the top 5 and the 0.05 cutoff apply; the output is identical on every run |
+| Similar skills: API | Each skill's exact `similar` array |
+| Browser: similar skills | The right pane lists similar skills with bars and percentages; clicking one selects it and clears a filter that hid it |
 | `serve --port 0` | Prints the URL. `GET /` returns the page; `/app.js` and `/style.css` return the assets |
 | Web API scan | Exact JSON body; one scan log line; temp directory removed |
 | Web API errors | Invalid URL `400`, unknown repository `404`, missing `url` `400`; exact JSON bodies |
@@ -616,3 +722,16 @@ If CI on the pull request is red:
 3. Fix the root cause. Don't skip, disable, or loosen the failing test.
 4. Confirm `./gradlew build` passes locally, then commit and push to the same branch.
 5. Repeat until CI is green, then merge.
+
+### 12.1 Parallel features
+
+Independent features may be built at the same time, **one feature per sandbox**. Each
+sandbox is an isolated copy of the repository with its own branch and its own agent.
+
+1. Each feature gets its own branch (`feature/<name>`) and its own pull request. Each
+   must meet the definition of done above on its own.
+2. The first pull request to go green is merged.
+3. The next one is then brought up to date with `main` (`git merge origin/main`), with
+   any conflicts resolved, and it must go green again before it is merged. A pull
+   request that was green before `main` changed is not done.
+4. After the last merge, CI on `main` must be green.
