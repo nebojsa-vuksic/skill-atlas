@@ -232,6 +232,54 @@ button:disabled { opacity: 0.6; cursor: progress; }
 
 .github-link { color: var(--accent); font-size: 13px; }
 
+/* ---- Similar skills ---- */
+
+.similar { margin: 16px 0 0; }
+.similar-heading { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.similar-list { display: grid; gap: 2px; }
+
+.similar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 3.5em;
+  grid-template-areas: "name bar score" "path bar score";
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-weight: 400;
+  text-align: left;
+}
+
+.similar-row:hover { background: var(--selected-bg); }
+.similar-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.similar-name { grid-area: name; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.similar-path {
+  grid-area: path;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.similar-bar {
+  grid-area: bar;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.similar-fill { display: block; height: 100%; background: var(--accent); }
+.similar-score { grid-area: score; color: var(--muted); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+.no-similar { margin: 0; color: var(--muted); font-size: 13px; }
+
 .tabs {
   display: flex;
   gap: 4px;
