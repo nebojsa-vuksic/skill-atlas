@@ -5,6 +5,8 @@ data class ScanResult(
     val branch: String,
     val commit: String,
     val skills: List<Skill>,
+    /** Skill files that are not skills of this repository, such as test fixtures (spec section 4.4). */
+    val ignored: List<IgnoredSkill> = emptyList(),
 )
 
 /** Renders the plain text report (spec section 5.2). */
@@ -19,21 +21,34 @@ object TextReport {
         val skills = result.skills
         if (skills.isEmpty()) {
             appendLine("No skills found.")
-            return@buildString
+        } else {
+            appendLine("Found ${skills.size} ${if (skills.size == 1) "skill" else "skills"}:")
         }
-        appendLine("Found ${skills.size} ${if (skills.size == 1) "skill" else "skills"}:")
         for (skill in skills) {
             appendLine()
             append("  ").append(sanitize(skill.name))
+            if (skill.shipped) append("  [$SHIPPED_LABEL]")
             if (skill.warnings.isNotEmpty()) append("  [warning: ${skill.warnings.joinToString(", ")}]")
             appendLine()
             appendLine("    ${shortenDescription(skill.description).ifEmpty { "(no description)" }}")
             appendLine("    ${sanitize(skill.path)}")
+            for (copy in skill.alsoAt) appendLine("    also in ${sanitize(copy)}")
+        }
+
+        if (result.ignored.isNotEmpty()) {
+            appendLine()
+            appendLine("${ignoredHeading(result.ignored.size)}:")
+            for (ignored in result.ignored) appendLine("  ${sanitize(ignored.path)}")
         }
     }
 }
 
 const val MAX_DESCRIPTION_LENGTH = 100
+
+const val SHIPPED_LABEL = "shipped in product"
+
+/** e.g. "Ignored 2 test fixtures (not skills)" (spec section 5.2). */
+fun ignoredHeading(count: Int) = "Ignored $count test ${if (count == 1) "fixture" else "fixtures"} (not skills)"
 
 private val WHITESPACE = Regex("\\s+")
 
