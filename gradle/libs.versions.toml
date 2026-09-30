@@ -1,0 +1,17 @@
+[versions]
+kotlin = "2.3.20"
+clikt = "5.1.0"
+kotlinx-serialization = "1.11.0"
+snakeyaml-engine = "2.10"
+junit = "5.13.4"
+
+[libraries]
+clikt = { module = "com.github.ajalt.clikt:clikt-core", version.ref = "clikt" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+snakeyaml-engine = { module = "org.snakeyaml:snakeyaml-engine", version.ref = "snakeyaml-engine" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
