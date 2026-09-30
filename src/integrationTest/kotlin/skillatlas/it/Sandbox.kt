@@ -77,17 +77,26 @@ class Sandbox(private val root: Path) : AutoCloseable {
     fun run(vararg args: String): CliRun = execute(listOf(LAUNCHER.toString(), *args))
 
     /**
-     * Runs the CLI inside a 100×40 pseudo-terminal. The terminal output, where stdout and
-     * stderr are mixed as a user would see them, is returned as [CliRun.stdout].
+     * Runs the CLI inside a pseudo-terminal, 100×40 by default. The terminal output, where
+     * stdout and stderr are mixed as a user would see them, is returned as [CliRun.stdout].
+     * [steps] are `wait:TEXT` / `send:KEYS` steps for `pty_run.py`, which type keys only
+     * after the text they wait for is on screen.
      */
-    fun runInTerminal(vararg args: String, interruptAfter: String? = null): CliRun {
+    fun runInTerminal(
+        vararg args: String,
+        interruptAfter: String? = null,
+        steps: List<String> = emptyList(),
+        columns: Int = 100,
+        rows: Int = 40,
+    ): CliRun {
         val helper = root.resolve("pty_run.py")
         if (!helper.exists()) {
             javaClass.getResourceAsStream("/pty_run.py")!!.use { Files.copy(it, helper) }
         }
         val command = buildList {
-            addAll(listOf("python3", helper.toString(), "--cols", "100", "--rows", "40"))
+            addAll(listOf("python3", helper.toString(), "--cols", columns.toString(), "--rows", rows.toString()))
             if (interruptAfter != null) addAll(listOf("--interrupt-after", interruptAfter))
+            for (step in steps) addAll(listOf("--step", step))
             add("--")
             add(LAUNCHER.toString())
             addAll(args)

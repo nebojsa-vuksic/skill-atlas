@@ -44,16 +44,19 @@ fun main(args: Array<String>) {
         git = Git(token = token),
         cloneUrl = { "$gitBaseUrl/${it.owner}/${it.name}.git" },
     )
-    val view = if (isStdoutTerminal()) RichScanView() else PlainScanView(System.out, System.err)
-    val cli = SkillAtlasCli(scanner, ScanLog(ScanLog.defaultLocation()), view)
+    val terminal = terminalStatus()
+    val view = if (terminal.stdout) RichScanView() else PlainScanView(System.out, System.err)
+    val cli = SkillAtlasCli(scanner, ScanLog(ScanLog.defaultLocation()), view, interactive = terminal.stdin && terminal.stdout)
     exitProcess(cli.run(args.toList()))
 }
 
-/** True when stdout is an interactive terminal rather than a pipe or file (spec section 5). */
-private fun isStdoutTerminal(): Boolean = try {
-    Tty.tryBind()?.use { it.isStdoutTty() } ?: false
+private class TerminalStatus(val stdin: Boolean, val stdout: Boolean)
+
+/** Whether stdin and stdout are interactive terminals rather than pipes or files (spec sections 5 and 5.8). */
+private fun terminalStatus(): TerminalStatus = try {
+    Tty.tryBind()?.use { TerminalStatus(it.isStdinTty(), it.isStdoutTty()) } ?: TerminalStatus(false, false)
 } catch (_: Exception) {
-    false
+    TerminalStatus(false, false)
 }
 
 /** Parses arguments, runs the command, and turns every outcome into an exit code (spec section 7). */
@@ -64,9 +67,11 @@ class SkillAtlasCli(
     private val out: PrintStream = System.out,
     private val err: PrintStream = System.err,
     private val clock: Clock = Clock.systemUTC(),
+    /** True when stdin and stdout are both terminals, which `browse` needs. */
+    private val interactive: Boolean = false,
 ) {
     fun run(args: List<String>): Int {
-        val command = RootCommand().subcommands(ScanCommand(), ServeCommand())
+        val command = RootCommand().subcommands(ScanCommand(), BrowseCommand(), ServeCommand())
         return try {
             command.parse(args)
             ExitCode.OK
@@ -120,18 +125,48 @@ class SkillAtlasCli(
         }
     }
 
-    private inner class ScanCommand : CoreCliktCommand(name = "scan") {
+    private inner class BrowseCommand : CoreCliktCommand(name = "browse") {
         private val url by argument(
             name = "github-project-url",
             help = "Repository to scan, e.g. https://github.com/owner/repo",
         )
 
         override fun help(context: Context) =
+            "Scan a GitHub repository, then browse its skills interactively in the terminal."
+
+        override fun run() {
+            try {
+                if (!interactive) throw NotATerminalException()
+                BrowseView(onScanned = ::appendToScanLog).run { progress -> scanner.scan(url, progress) }
+            } catch (e: SkillAtlasException) {
+                err.println("error: ${e.message}")
+                throw ProgramResult(e.exitCode)
+            } catch (e: Exception) {
+                err.println("error: unexpected failure: ${e.message ?: e.javaClass.name}")
+                throw ProgramResult(ExitCode.INTERNAL_ERROR)
+            }
+        }
+    }
+
+    private inner class ScanCommand : CoreCliktCommand(name = "scan") {
+        private val url by argument(
+            name = "github-project-url",
+            help = "Repository to scan, e.g. https://github.com/owner/repo",
+        )
+
+        private val filter by option("-f", "--filter", metavar = "<words>", help = "List only skills whose name or description has every word")
+        private val skill by option("-s", "--skill", metavar = "<name-or-path>", help = "Show one skill's details, similar skills and content")
+
+        override fun help(context: Context) =
             "Scan the default branch of a GitHub repository and list its skills."
 
         override fun run() {
+            if (filter != null && skill != null) {
+                err.println("error: --filter and --skill can't be used together")
+                throw ProgramResult(ExitCode.USAGE)
+            }
             val result = try {
-                view.show { progress -> scanner.scan(url, progress) }
+                view.show { progress -> present(scanner.scan(url, progress)) }.result
             } catch (e: SkillAtlasException) {
                 err.println("error: ${e.message}")
                 throw ProgramResult(e.exitCode)
@@ -140,11 +175,27 @@ class SkillAtlasCli(
                 throw ProgramResult(ExitCode.INTERNAL_ERROR)
             }
 
-            try {
-                scanLog.append(ScanLogEntry.of(result, clock.instant()))
-            } catch (e: Exception) {
-                err.println("warning: could not write scan log ${scanLog.file}: ${e.message}")
+            appendToScanLog(result)
+        }
+
+        private fun present(result: ScanResult): Presentation {
+            val selector = skill
+            if (selector == null) return Presentation.SkillList(result, filter?.takeIf { it.isNotBlank() })
+            return try {
+                Presentation.detail(result, selector)
+            } catch (e: SkillAtlasException) {
+                // The scan itself succeeded, so it still counts for the scan log.
+                appendToScanLog(result)
+                throw e
             }
+        }
+    }
+
+    private fun appendToScanLog(result: ScanResult) {
+        try {
+            scanLog.append(ScanLogEntry.of(result, clock.instant()))
+        } catch (e: Exception) {
+            err.println("warning: could not write scan log ${scanLog.file}: ${e.message}")
         }
     }
 }

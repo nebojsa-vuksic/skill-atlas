@@ -26,6 +26,17 @@ In a terminal the results are shown in a color-highlighted view built with
 [Mosaic](https://github.com/JakeWharton/mosaic), with a live status line while scanning.
 When stdout is piped or redirected, the tool prints plain text instead.
 
+### Filter, skill details and interactive browsing
+
+```
+skill-atlas scan <url> --filter "test run"     # only skills whose name or description has every word
+skill-atlas scan <url> --skill mps-tests       # one skill: description, paths, similar skills, SKILL.md
+skill-atlas browse <url>                       # full-screen list + details in the terminal
+```
+
+In `browse`: ↑/↓ select, `/` filter, Tab to jump into similar skills, PgUp/PgDn scroll,
+Esc clear the filter, `q` quit.
+
 ### Web view
 
 ```

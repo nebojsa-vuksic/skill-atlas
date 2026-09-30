@@ -626,8 +626,9 @@ version of the web view in the terminal. It is built with Mosaic.
 - **Scanning.** It shows the same live status line as `scan` (section 5.1). Scan errors
   exit with the codes and messages of section 7, and a successful scan appends one line
   to the scan log.
-- **Size.** The view fills the terminal's current size, and it adapts when the terminal
-  is resized.
+- **Size.** The view fills the terminal's current size, minus one row so the last line
+  never scrolls the screen, and it adapts when the terminal is resized. Below 60×10 it
+  shows only `Terminal too small: browse needs at least 60×10.`
 
 ```
  SKILL ATLAS  JetBrains/MPS  49d37b63488a master
@@ -655,7 +656,8 @@ version of the web view in the terminal. It is built with Mosaic.
     filter has focus, or a dim `/ filter` placeholder when empty. The `<n> of <total>`
     count is right-aligned on the same line, accent-colored while a filter is active.
   - A rule follows, then the skills, each with the compact look of section 5.4: a name
-    line with icons (`◆`, `⚠`, `⧉ n`) at the right end, and one dim description line.
+    line with icons (`◆`, `⚠`, and `⧉n` written without a space, e.g. `⧉2`) at the right
+    end, and one dim description line.
     Both lines are cut with `…` to fit, and a blank line follows each skill.
   - Matches are highlighted as in section 5.7. The selected skill has a `▌` accent bar and
     a bold name.

@@ -9,9 +9,11 @@ class RichReportTest {
     private val sha = "3f2a9c1e8b7d6a5f4e3d2c1b0a9f8e7d6c5b4a39"
     private val repository = RepositoryMetadata("anthropics/skills", "Public repository for Agent Skills", "main")
 
-    private fun render(result: ScanResult, columns: Int = 120): String = runBlocking {
+    private fun render(result: ScanResult, columns: Int = 120): String = render(Presentation.SkillList(result), columns)
+
+    private fun render(presentation: Presentation, columns: Int = 120): String = runBlocking {
         var snapshot = ""
-        runMosaicTest { snapshot = setContentAndSnapshot { Report(result, columns) } }
+        runMosaicTest { snapshot = setContentAndSnapshot { Report(presentation, columns) } }
         snapshot.lines().joinToString("\n") { it.trimEnd() }
     }
 
@@ -76,5 +78,65 @@ class RichReportTest {
 
         assertEquals("   Stop and check this skill before finishing…", lines[9])
         assertEquals(true, lines.all { it.length < 50 || it.contains(sha) })
+    }
+
+    @Test
+    fun `shows the filter count and the matching skills`() {
+        val result = ScanResult(
+            repository, "main", sha,
+            listOf(Skill("mps-tests", "Write MPS tests.", "skills/mps-tests"), Skill("pdf", "Extract PDF text.", "skills/pdf")),
+        )
+
+        val lines = render(Presentation.SkillList(result, "test")).lines()
+
+        assertEquals(" 1 of 2 skills match \"test\"", lines[6])
+        assertEquals(" ● mps-tests", lines[8])
+        assertEquals("   Write MPS tests.", lines[9])
+        assertEquals(false, lines.any { "pdf" in it })
+    }
+
+    @Test
+    fun `shows one skill with similar skills and its file`() {
+        val skill = Skill("mps-tests", "Write MPS tests.", "skills/mps-tests", alsoAt = listOf(".claude/skills/mps-tests"))
+        val result = ScanResult(repository, "main", sha, listOf(skill), contents = mapOf(skill.path to "---\nname: mps-tests\n---\n"))
+        val detail = Presentation.SkillDetail(result, skill, listOf(SimilarSkill("skills/run", "mps-run", 62)))
+
+        assertEquals(
+            listOf(
+                " Skill        mps-tests",
+                " Path         skills/mps-tests",
+                " Also in      .claude/skills/mps-tests",
+                " GitHub       https://github.com/anthropics/skills/blob/$sha/skills/mps-tests/SKILL.md",
+                "",
+                " Description",
+                "   Write MPS tests.",
+                "",
+                " Similar skills",
+                "   mps-run  ██████░░░░  62 %  skills/run",
+                "",
+                " SKILL.md",
+                "   ---",
+                "   name: mps-tests",
+                "   ---",
+            ),
+            render(detail).lines().drop(6),
+        )
+    }
+
+    @Test
+    fun `draws the browse frame exactly as the screen lays it out`() = runBlocking {
+        val skills = listOf(Skill("mps-tests", "Write MPS tests.", "skills/mps-tests"), Skill("pdf", "Extract PDF text.", "skills/pdf"))
+        val state = BrowseState(
+            ScanResult(repository, "main", sha, skills, contents = mapOf("skills/pdf" to "# PDF\n")),
+            mapOf("skills/mps-tests" to listOf(SimilarSkill("skills/pdf", "pdf", 12)), "skills/pdf" to emptyList()),
+        )
+        var snapshot = ""
+        runMosaicTest {
+            snapshot = setContentAndSnapshot { Browser(state) }
+            val size = this.state.size.value
+            val expected = BrowseScreen.render(state, size.columns, size.rows - 1).lines.map { it.text.trimEnd() }
+            assertEquals(expected, snapshot.lines().map { it.trimEnd() }.take(expected.size))
+        }
+        assertEquals(true, " SKILL ATLAS   anthropics/skills  3f2a9c1e8b7d main" in snapshot)
     }
 }

@@ -8,18 +8,18 @@ fun interface ScanView {
      * Runs [scan], showing its progress while it works and its report once it finishes.
      * Returns the result, or rethrows whatever [scan] threw.
      */
-    fun show(scan: (progress: (String) -> Unit) -> ScanResult): ScanResult
+    fun show(scan: (progress: (String) -> Unit) -> Presentation): Presentation
 }
 
-/** Progress to stderr, then the plain text report to stdout (spec section 5.2). */
+/** Progress to stderr, then the plain text report to stdout (spec sections 5.2 and 5.7). */
 class PlainScanView(
     private val out: PrintStream,
     private val err: PrintStream,
 ) : ScanView {
-    override fun show(scan: (progress: (String) -> Unit) -> ScanResult): ScanResult {
-        val result = scan(err::println)
-        out.print(TextReport.render(result))
+    override fun show(scan: (progress: (String) -> Unit) -> Presentation): Presentation {
+        val presentation = scan(err::println)
+        out.print(TextReport.render(presentation))
         out.flush()
-        return result
+        return presentation
     }
 }

@@ -140,4 +140,107 @@ class TextReportTest {
 
         assertTrue(TextReport.render(result).endsWith("No skills found.\n\nIgnored 2 test fixtures (not skills):\n  tests/a\n  tests/b\n"))
     }
+
+    private val filterResult = ScanResult(
+        repository, "main", sha,
+        listOf(
+            Skill("mps-run-configurations", "Create run configurations that run MPS tests.", "skills/run", shipped = true),
+            Skill(
+                "mps-aspect-typesystem",
+                "Use when defining type rules, inference rules, checking rules, subtyping rules or quick fixes in a " +
+                    "language, or when writing a WhenConcrete test statement that checks them against the expected types.",
+                "skills/typesystem",
+            ),
+            Skill("pdf-extract", "Extract text from PDFs.", "skills/pdf"),
+        ),
+    )
+
+    @Test
+    fun `lists only the skills that match the filter`() {
+        assertEquals(
+            """
+            Repository:  anthropics/skills
+            Description: Public repository for Agent Skills
+            Commit:      $sha (main)
+
+            Found 3 skills, 2 match "test":
+
+              mps-run-configurations  [shipped in product]
+                Create run configurations that run MPS tests.
+                skills/run
+
+              mps-aspect-typesystem
+                …or when writing a WhenConcrete test statement that checks them against the…
+                skills/typesystem
+
+            """.trimIndent(),
+            TextReport.render(Presentation.SkillList(filterResult, "test")),
+        )
+    }
+
+    @Test
+    fun `says so when nothing matches the filter`() {
+        assertTrue(
+            TextReport.render(Presentation.SkillList(filterResult, "nothing here"))
+                .endsWith("Found 3 skills, none match \"nothing here\".\n"),
+        )
+    }
+
+    @Test
+    fun `prints one skill with similar skills and its exact file`() {
+        val file = "---\nname: mps-tests\ndescription: Write MPS tests.\n---\n\n# MPS tests\n\nRun them.\n"
+        val skill = Skill("mps-tests", "Write MPS tests.", ".agents/skills/mps-tests", alsoAt = listOf(".claude/skills/mps-tests", "p/resources/mps-tests"), shipped = true)
+        val result = ScanResult(repository, "main", sha, listOf(skill), contents = mapOf(skill.path to file))
+        val detail = Presentation.SkillDetail(
+            result, skill,
+            listOf(SimilarSkill("skills/run", "mps-run-configurations", 62), SimilarSkill("skills/typesystem", "mps-typesystem", 7)),
+        )
+
+        assertEquals(
+            """
+            Repository:  anthropics/skills
+            Description: Public repository for Agent Skills
+            Commit:      $sha (main)
+
+            Skill:       mps-tests  [shipped in product]
+            Path:        .agents/skills/mps-tests
+            Also in:     .claude/skills/mps-tests
+                         p/resources/mps-tests
+            GitHub:      https://github.com/anthropics/skills/blob/$sha/.agents/skills/mps-tests/SKILL.md
+
+            Description:
+              Write MPS tests.
+
+            Similar skills:
+              mps-run-configurations  ██████░░░░  62 %  skills/run
+              mps-typesystem          █░░░░░░░░░   7 %  skills/typesystem
+
+            SKILL.md:
+              ---
+              name: mps-tests
+              description: Write MPS tests.
+              ---
+
+              # MPS tests
+
+              Run them.
+
+            """.trimIndent(),
+            TextReport.render(detail),
+        )
+    }
+
+    @Test
+    fun `prints a skill without copies, similar skills or content`() {
+        val skill = Skill("lonely", "", "skills/lonely", listOf("missing description"))
+        val detail = Presentation.SkillDetail(ScanResult(repository, "main", sha, listOf(skill)), skill, emptyList())
+
+        val report = TextReport.render(detail)
+
+        assertTrue("Also in" !in report, report)
+        assertTrue("Skill:       lonely  [warning: missing description]\n" in report, report)
+        assertTrue("Description:\n  (no description)\n" in report, report)
+        assertTrue("Similar skills:\n  No similar skills found.\n" in report, report)
+        assertTrue(report.endsWith("SKILL.md:\n  (content not available)\n"), report)
+    }
 }
