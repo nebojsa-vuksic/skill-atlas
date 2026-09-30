@@ -288,3 +288,102 @@ skill (section 4.3).
 9. When stdout is piped, e.g. `skill-atlas scan <url> | cat`, the output is the plain
    format from section 5.2 with no escape codes.
 10. No skill description in either format is longer than 100 characters plus `…`.
+
+## 11. Testing
+
+### 11.1 Unit tests
+
+In-process tests in `src/test/kotlin` cover each component on its own: URL parsing,
+frontmatter parsing, skill discovery, report rendering, the scan log, and the command
+wiring. They run with `./gradlew test`.
+
+### 11.2 CLI integration tests
+
+Integration tests in `src/integrationTest/kotlin` run the **real, installed CLI**
+(`build/install/skill-atlas/bin/skill-atlas`) as a separate process and assert on what
+it actually produces:
+
+- the exact stdout, character for character
+- the exact stderr
+- the exit code
+- the scan log line
+- that the temporary clone directory is gone afterwards
+
+They run with `./gradlew integrationTest`, which builds the distribution first. They are
+part of `./gradlew check` and `./gradlew build`, so they always run both locally and on
+CI.
+
+**Determinism.** An integration test gives the same result on every machine and every
+run:
+
+- **No network.** Nothing talks to github.com. Each test serves the GitHub API from a
+  stub HTTP server on `127.0.0.1` and clones from local git repositories.
+- **Fixed fixtures.** Fixture repositories are created during the test with a fixed
+  author, committer, email, and timestamp, so the same content always produces the
+  same commit SHA.
+- **Isolated environment.** The CLI process runs with:
+  - `GITHUB_TOKEN` removed
+  - `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_NOSYSTEM=1`, so the developer's git
+    configuration cannot change the outcome
+  - `XDG_STATE_HOME` and `java.io.tmpdir` pointing into per-test temporary directories
+- **Fixed terminal.** The rich view is tested inside a pseudo-terminal with a fixed size
+  of 100×40.
+- **No timing assumptions.** Tests never sleep to wait for something to happen. They wait
+  for a specific marker in the output, with a timeout that only exists to fail a hung
+  test.
+
+**Test hooks.** Two environment variables let tests point the CLI at local stand-ins.
+They are meant for tests only.
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `SKILL_ATLAS_GITHUB_API_URL` | `https://api.github.com` | Base URL of the GitHub REST API |
+| `SKILL_ATLAS_GIT_BASE_URL` | `https://github.com` | Repositories are cloned from `<base>/<owner>/<repo>.git` |
+
+**Required scenarios:**
+
+| Scenario | Asserts |
+|----------|---------|
+| Scan a repository with valid, broken, and incomplete skills, plus a skipped `node_modules` skill | Exact plain report and progress messages; exit `0`; one scan log line; temp directory removed |
+| Every URL form from section 3.3 | Identical report for each form |
+| Repository without skills and without a description | `Description: (none)` and `No skills found.`; exit `0` |
+| Invalid URL | Exit `2` and the exact message; stdout is empty |
+| Unknown repository (API returns 404) | Exit `3` and the exact message |
+| Empty repository (the default branch doesn't exist) | Exit `4` and the exact message; temp directory removed |
+| Rate limited (API returns 403 with `x-ratelimit-remaining: 0`) | Exit `5` and the exact message |
+| `--help`, `--version`, no arguments, unknown option | Exit `0`, `0`, `2`, `2` |
+| Piped stdout | No escape codes anywhere in the output |
+| Rich view in a pseudo-terminal | Escape codes are present, and the report text matches section 5.1 |
+| Ctrl-C while fetching metadata, in the rich view | Exit `130`, `error: scan interrupted`, temp directory removed |
+
+### 11.3 Continuous integration
+
+The GitHub Actions workflow `.github/workflows/ci.yml` runs `./gradlew build` on every
+push to any branch and on every pull request. It runs on `ubuntu-latest` and
+`macos-latest` with Java 21. When a run fails, the test reports are uploaded as an
+artifact.
+
+The test tools needed are `git`, a JDK, and `python3` (used to run the CLI in a
+pseudo-terminal). All three are preinstalled on GitHub-hosted runners.
+
+## 12. Definition of done
+
+Every change goes through a pull request, managed with the GitHub CLI (`gh`). A change is
+done only when **all** of the following are true:
+
+1. **`./gradlew build` passes locally.** This includes every unit test and every CLI
+   integration test. No test may be skipped or disabled to make it pass.
+2. **The branch is pushed and has a pull request,** opened with
+   `gh pr create --base main --fill` or with an explicit title and body.
+3. **CI is green on the pull request** for its latest commit, on every platform in the
+   matrix. Watch it with `gh pr checks <pr> --watch`.
+4. **The pull request is merged** with `gh pr merge <pr> --merge --delete-branch`.
+
+If CI on the pull request is red:
+
+1. Find the failing run, e.g. `gh pr checks <pr>` or `gh run list --branch <branch>`.
+2. Read the failing job's logs with `gh run view <run-id> --log-failed`. If the test
+   reports are needed, download them with `gh run download <run-id>`.
+3. Fix the root cause. Don't skip, disable, or loosen the failing test.
+4. Confirm `./gradlew build` passes locally, then commit and push to the same branch.
+5. Repeat until CI is green, then merge.

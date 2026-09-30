@@ -23,8 +23,18 @@ fun main(args: Array<String>) {
     // Descriptions may contain any Unicode, and the report uses "…", "●" and "⚠".
     System.setOut(PrintStream(FileOutputStream(FileDescriptor.out), true, Charsets.UTF_8))
 
-    val token = System.getenv("GITHUB_TOKEN")?.takeIf { it.isNotBlank() }
-    val scanner = Scanner(github = GitHubClient(token = token), git = Git(token = token))
+    val environment = System.getenv()
+    fun setting(name: String) = environment[name]?.takeIf { it.isNotBlank() }
+
+    val token = setting("GITHUB_TOKEN")
+    // Test hooks that point the CLI at a local API stub and local repositories (spec section 11.2).
+    val apiUrl = setting("SKILL_ATLAS_GITHUB_API_URL")?.trimEnd('/') ?: "https://api.github.com"
+    val gitBaseUrl = setting("SKILL_ATLAS_GIT_BASE_URL")?.trimEnd('/') ?: "https://github.com"
+    val scanner = Scanner(
+        github = GitHubClient(apiBaseUrl = apiUrl, token = token),
+        git = Git(token = token),
+        cloneUrl = { "$gitBaseUrl/${it.owner}/${it.name}.git" },
+    )
     val view = if (isStdoutTerminal()) RichScanView() else PlainScanView(System.out, System.err)
     val cli = SkillAtlasCli(scanner, ScanLog(ScanLog.defaultLocation()), view)
     exitProcess(cli.run(args.toList()))

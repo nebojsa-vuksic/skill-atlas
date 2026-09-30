@@ -48,3 +48,34 @@ tasks.jar {
 tasks.test {
     useJUnitPlatform()
 }
+
+// Black-box tests that run the installed CLI as a separate process (spec section 11.2).
+testing {
+    suites {
+        register<JvmTestSuite>("integrationTest") {
+            useJUnitJupiter(libs.versions.junit)
+            dependencies {
+                implementation("org.jetbrains.kotlin:kotlin-test-junit5")
+                // The Compose compiler plugin applies to every compilation and insists on its runtime.
+                compileOnly(libs.mosaic.runtime)
+            }
+            targets.all {
+                testTask.configure {
+                    val installDist = tasks.installDist
+                    dependsOn(installDist)
+                    inputs.dir(installDist.map { it.destinationDir })
+                    systemProperty(
+                        "skillAtlas.launcher",
+                        installDist.get().destinationDir.resolve("bin/skill-atlas").absolutePath,
+                    )
+                    systemProperty("skillAtlas.version", project.version.toString())
+                    shouldRunAfter(tasks.test)
+                }
+            }
+        }
+    }
+}
+
+tasks.check {
+    dependsOn(testing.suites.named("integrationTest"))
+}

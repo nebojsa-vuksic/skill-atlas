@@ -33,7 +33,15 @@ Every successful scan is appended as one JSON line to
 ## Tests
 
 ```
-./gradlew test
+./gradlew build
 ```
 
-The tests use a local git repository and a stubbed GitHub API, so they need no network access.
+This runs the unit tests (`./gradlew test`) and the CLI integration tests
+(`./gradlew integrationTest`). The integration tests run the installed `skill-atlas`
+launcher as a separate process against local fixture repositories and a stub GitHub API,
+including one run inside a pseudo-terminal. They need `git` and `python3`, but no
+network access.
+
+CI runs the same build on Linux and macOS for every push and pull request. See the
+definition of done in [`specs/spec.md`](specs/spec.md#12-definition-of-done): every
+change goes through a pull request and is merged once CI is green.
