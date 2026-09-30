@@ -227,7 +227,7 @@ class EdgeCaseIntegrationTest {
                         """"short_description":"Splits a class in commonMain into JVM and non-JVM parts.",""" +
                         """"path":".claude/skills/split-jvm-nonjvm","also_at":[],"shipped":false,"warnings":[],""" +
                         """"content":"---\nname: split-jvm-nonjvm\ndescription: Splits a class in commonMain into JVM and non-JVM parts.\n---\n\n# split-jvm-nonjvm\n",""" +
-                        """"content_html":"<h1>split-jvm-nonjvm</h1>\n"}],""" +
+                        """"content_html":"<h1>split-jvm-nonjvm</h1>\n","similar":[]}],""" +
                         """"ignored":[""" +
                         """{"path":"integration-tests/src/jvmTest/resources/skills/arithmetic-evaluator","reason":"test data"},""" +
                         """{"path":"integration-tests/src/jvmTest/resources/skills/weather-retrieval","reason":"test data"}]}""",

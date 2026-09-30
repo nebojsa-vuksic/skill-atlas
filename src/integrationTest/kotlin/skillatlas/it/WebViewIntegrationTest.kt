@@ -67,16 +67,45 @@ class WebViewIntegrationTest {
                 """"skills":[""" +
                 """{"name":"csv-tools","description":"","short_description":"","path":"skills/csv",""" +
                 """"also_at":[],"shipped":false,"warnings":["missing description"],""" +
-                """"content":"---\nname: csv-tools\n---\n","content_html":""},""" +
+                """"content":"---\nname: csv-tools\n---\n","content_html":"","similar":[]},""" +
                 """{"name":"pdf-extract","description":"Extract text and tables from PDF files.",""" +
                 """"short_description":"Extract text and tables from PDF files.","path":"skills/pdf",""" +
                 """"also_at":[],"shipped":false,"warnings":[],""" +
                 """"content":"---\nname: pdf-extract\ndescription: Extract text and tables from PDF files.\n---\n\n# PDF\n\nUse `pdftotext`.\n",""" +
-                """"content_html":"<h1>PDF</h1>\n<p>Use <code>pdftotext</code>.</p>\n"}],"ignored":[]}""",
+                """"content_html":"<h1>PDF</h1>\n<p>Use <code>pdftotext</code>.</p>\n","similar":[]}],"ignored":[]}""",
             response.body,
         )
         assertEquals(1, sandbox.scanLogLines().size)
         assertEquals(emptyList(), sandbox.leftoverCloneDirectories())
+    }
+
+    @Test
+    fun `lists each skill's similar skills through the API`() {
+        sandbox.api.repository("acme/skills", "Acme agent skills")
+        sandbox.createRepository("acme/skills", SIMILAR_SKILLS)
+
+        val response = web.get("/api/scan?url=github.com/acme/skills")
+
+        assertEquals(200, response.status, response.toString())
+        val similar = Regex(""""path":"([^"]*)","also_at":.*?"similar":(\[[^\]]*])""").findAll(response.body)
+            .associate { it.groupValues[1] to it.groupValues[2] }
+        assertEquals(
+            mapOf(
+                "skills/commits" to "[]",
+                "skills/docx" to """[{"path":"skills/pdf-extract","name":"pdf-extract","score":17}]""",
+                "skills/mps-aspect-typesystem" to
+                    """[{"path":"skills/mps-tests","name":"mps-tests","score":22},""" +
+                    """{"path":"skills/mps-run-configurations","name":"mps-run-configurations","score":12}]""",
+                "skills/mps-run-configurations" to
+                    """[{"path":"skills/mps-tests","name":"mps-tests","score":41},""" +
+                    """{"path":"skills/mps-aspect-typesystem","name":"mps-aspect-typesystem","score":12}]""",
+                "skills/mps-tests" to
+                    """[{"path":"skills/mps-run-configurations","name":"mps-run-configurations","score":41},""" +
+                    """{"path":"skills/mps-aspect-typesystem","name":"mps-aspect-typesystem","score":22}]""",
+                "skills/pdf-extract" to """[{"path":"skills/docx","name":"docx","score":17}]""",
+            ),
+            similar,
+        )
     }
 
     @Test
