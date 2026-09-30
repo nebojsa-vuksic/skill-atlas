@@ -1,17 +1,18 @@
 // Web view demo for several repositories with search (spec sections 5.10 and 13).
-//   node web.mjs <web-view-url> <output.webm>
+//   node web.mjs <web-view-url> <output-dir>
 import { chromium } from "playwright";
 import { rename } from "node:fs/promises";
-import { dirname } from "node:path";
+import { join } from "node:path";
 
-const [url, output] = process.argv.slice(2);
+const [url, outDir] = process.argv.slice(2);
+const output = join(outDir, "web.webm");
 const pause = (page, ms = 1500) => page.waitForTimeout(ms);
 const REPOSITORIES = "github.com/JetBrains/MPS github.com/JetBrains/koog github.com/anthropics/skills";
 
 const browser = await chromium.launch();
 const context = await browser.newContext({
   viewport: { width: 1280, height: 800 },
-  recordVideo: { dir: dirname(output), size: { width: 1280, height: 800 } },
+  recordVideo: { dir: outDir, size: { width: 1280, height: 800 } },
 });
 const page = await context.newPage();
 await page.goto(url);

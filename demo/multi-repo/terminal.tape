@@ -1,11 +1,9 @@
 # Terminal demo for several repositories with search (spec sections 5.10 and 13).
-Output terminal.gif
-Output terminal.mp4
-
 Require skill-atlas
 
 Set Shell "bash"
 Set FontSize 16
+Set Framerate 20
 Set Width 1400
 Set Height 820
 Set Padding 20

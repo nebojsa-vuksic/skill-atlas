@@ -10,6 +10,21 @@ skill-atlas scan <github-project-url>
 skill-atlas serve [--port <port>]
 ```
 
+## Demos
+
+A narrated tour of every feature, recorded from scripts in `demo/tour-*/` (spec section
+13.5). The videos have a voice-over and the GIFs have captions. They live on the `demos`
+branch, so viewing them needs access to this private repository.
+
+| Video | Shows | |
+|-------|-------|-|
+| [tour-web-basics](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-basics/web.mp4) | Scanning a repository, the split pane, the Raw tab, the divider, similar skills | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-basics/web.gif?raw=true) |
+| [tour-web-search](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-search/web.mp4) | JetBrains/MPS duplicates and product skills, the filter, snippets, Esc, the URL state | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-search/web.gif?raw=true) |
+| [tour-web-multi](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-multi/web.mp4) | Three repositories, grouped lists, `repo:` search, similar skills across repositories | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-multi/web.gif?raw=true) |
+| [tour-cli](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-cli/terminal.mp4) | `scan` rich and plain, merged copies, fixtures, `--filter`, `--skill`, several repositories | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-cli/terminal.gif?raw=true) |
+| [tour-browse](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-browse/terminal.mp4) | `browse`: moving, the live filter, similar skills, quitting | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-browse/terminal.gif?raw=true) |
+| [tour-shell](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-shell/terminal.mp4) | The shell: the palette, Tab completion, `/scan`, `/filter`, `/skill`, `/log` | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-shell/terminal.gif?raw=true) |
+
 ## Requirements
 
 - Java 21 or newer
@@ -40,7 +55,8 @@ across them.
 ### Demos for pull requests
 
 `demo/record.sh <name>` records the scripted demo in `demo/<name>/` (Playwright for the web
-view, VHS for the terminal) into `build/demo/<name>/`. `demo/publish.sh <pr> <name>` pushes
+view, VHS for the terminal), with a local neural voice-over (Kokoro) and captions, into
+`build/demo/<name>/`. `demo/publish.sh <pr> <name>` pushes
 it to the `demos` branch and prints the Markdown for the PR. See spec section 13.
 
 ### Filter, skill details and interactive browsing

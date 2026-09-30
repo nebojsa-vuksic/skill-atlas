@@ -1,15 +1,24 @@
 #!/usr/bin/env bash
-# Publishes build/demo/<name>/ to the orphan `demos` branch as demos/pr-<number>/ and prints
-# the Markdown to paste into the pull request (spec section 13.3).
+# Publishes recorded demos to the orphan `demos` branch and prints the Markdown for them
+# (spec section 13.3).
 #
-#   demo/publish.sh <pr-number> <name>
+#   demo/publish.sh <pr-number | label> <name>...
+#
+# A PR number publishes to demos/pr-<number>/, a label such as `tour` to demos/<label>/.
+# One name puts its files straight into that folder; several get a subfolder each.
 set -euo pipefail
 
-PR="${1:?usage: demo/publish.sh <pr-number> <name>}"
-NAME="${2:?usage: demo/publish.sh <pr-number> <name>}"
+TARGET="${1:?usage: demo/publish.sh <pr-number | label> <name>...}"
+shift
+[ "$#" -gt 0 ] || { echo "usage: demo/publish.sh <pr-number | label> <name>..." >&2; exit 2; }
+case "$TARGET" in
+  *[!0-9]*) FOLDER="$TARGET" ;;
+  *) FOLDER="pr-$TARGET" ;;
+esac
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="$ROOT/build/demo/$NAME"
-[ -d "$SRC" ] || { echo "publish: no recording in $SRC; run demo/record.sh $NAME first" >&2; exit 1; }
+for NAME in "$@"; do
+  [ -d "$ROOT/build/demo/$NAME" ] || { echo "publish: no recording in build/demo/$NAME; run demo/record.sh $NAME first" >&2; exit 1; }
+done
 
 REPO="$(cd "$ROOT" && gh repo view --json nameWithOwner --jq .nameWithOwner)"
 WORK="$(mktemp -d)/demos"
@@ -25,26 +34,30 @@ else
   printf '# Demo recordings\n\nScripted demos for pull requests, one folder per PR (spec section 13).\nThis branch shares no history with `main`.\n' >"$WORK/README.md"
 fi
 
-TARGET="$WORK/demos/pr-$PR"
-rm -rf "$TARGET"
-mkdir -p "$TARGET"
-cp "$SRC"/*.gif "$SRC"/*.mp4 "$TARGET"/ 2>/dev/null || true
-[ -n "$(ls -A "$TARGET")" ] || { echo "publish: no .gif or .mp4 files in $SRC" >&2; exit 1; }
+rm -rf "$WORK/demos/$FOLDER"
+for NAME in "$@"; do
+  if [ "$#" -eq 1 ]; then DEST="$WORK/demos/$FOLDER"; else DEST="$WORK/demos/$FOLDER/$NAME"; fi
+  mkdir -p "$DEST"
+  cp "$ROOT/build/demo/$NAME"/*.gif "$ROOT/build/demo/$NAME"/*.mp4 "$DEST"/ 2>/dev/null || true
+  [ -n "$(ls -A "$DEST")" ] || { echo "publish: no .gif or .mp4 files in build/demo/$NAME" >&2; exit 1; }
+done
 
 git -C "$WORK" add -A
-git -C "$WORK" commit -q -m "Demo for PR #$PR ($NAME)"
+git -C "$WORK" commit -q -m "Demos in $FOLDER: $*"
 git -C "$WORK" push -q origin demos
 
-BASE="https://github.com/$REPO/blob/demos/demos/pr-$PR"
-echo "publish: pushed demos/pr-$PR to the demos branch. Paste this into the PR:"
+echo "publish: pushed demos/$FOLDER to the demos branch. Markdown:"
 echo
-for gif in "$TARGET"/*.gif; do
-  file="$(basename "$gif")"
-  stem="${file%.gif}"
-  title="$(printf '%s' "$stem" | awk '{ print toupper(substr($0, 1, 1)) substr($0, 2) }')"
-  echo "**$title demo**"
-  echo
-  echo "![${stem} demo]($BASE/$file?raw=true)"
-  [ -f "$TARGET/$stem.mp4" ] && echo "[Full-quality video]($BASE/$stem.mp4)"
-  echo
+for NAME in "$@"; do
+  if [ "$#" -eq 1 ]; then SUB=""; else SUB="/$NAME"; fi
+  BASE="https://github.com/$REPO/blob/demos/demos/$FOLDER$SUB"
+  for gif in "$WORK/demos/$FOLDER$SUB"/*.gif; do
+    file="$(basename "$gif")"
+    stem="${file%.gif}"
+    echo "**$NAME ($stem)**"
+    echo
+    echo "![$NAME $stem demo]($BASE/$file?raw=true)"
+    [ -f "$WORK/demos/$FOLDER$SUB/$stem.mp4" ] && echo "[Video with voice-over]($BASE/$stem.mp4)"
+    echo
+  done
 done
