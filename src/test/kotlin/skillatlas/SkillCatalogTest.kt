@@ -60,6 +60,7 @@ class SkillCatalogTest {
                     ),
                 ),
                 ignored = emptyList(),
+                contents = mapOf(".agents/skills/mps-tests" to content),
             ),
             catalog(),
         )
@@ -99,6 +100,7 @@ class SkillCatalogTest {
                     IgnoredSkill("integration-tests/src/jvmTest/resources/skills/arithmetic", SkillCatalog.TEST_DATA),
                     IgnoredSkill("integration-tests/src/jvmTest/resources/skills/weather", SkillCatalog.TEST_DATA),
                 ),
+                contents = mapOf(".claude/skills/weather" to skill("weather")),
             ),
             catalog(),
         )
@@ -133,5 +135,14 @@ class SkillCatalogTest {
         write(".claude/skills/big", large)
 
         assertEquals(listOf(".agents/skills/big", ".claude/skills/big"), catalog().skills.map { it.path })
+    }
+
+    @Test
+    fun `keeps the exact text of each listed skill but not of oversized ones`() {
+        write(".agents/skills/a", skill("a") + "\n# A\n")
+        write(".claude/skills/a", skill("a") + "\n# A\n")
+        write("skills/big", skill("big") + "x".repeat(SkillParser.MAX_FILE_SIZE.toInt()))
+
+        assertEquals(mapOf(".agents/skills/a" to skill("a") + "\n# A\n"), catalog().contents)
     }
 }

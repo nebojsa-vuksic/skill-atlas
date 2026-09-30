@@ -6,6 +6,8 @@ snakeyaml-engine = "2.10"
 junit = "5.13.4"
 mosaic = "0.18.0"
 kotlinx-coroutines = "1.10.2"
+commonmark = "0.30.0"
+playwright = "1.63.0"
 
 [libraries]
 clikt = { module = "com.github.ajalt.clikt:clikt-core", version.ref = "clikt" }
@@ -15,6 +17,9 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 mosaic-runtime = { module = "com.jakewharton.mosaic:mosaic-runtime", version.ref = "mosaic" }
 mosaic-tty = { module = "com.jakewharton.mosaic:mosaic-tty", version.ref = "mosaic" }
 mosaic-testing = { module = "com.jakewharton.mosaic:mosaic-testing", version.ref = "mosaic" }
+commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
+commonmark-tables = { module = "org.commonmark:commonmark-ext-gfm-tables", version.ref = "commonmark" }
+playwright = { module = "com.microsoft.playwright:playwright", version.ref = "playwright" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 

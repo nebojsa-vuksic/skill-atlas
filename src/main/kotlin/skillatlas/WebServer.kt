@@ -30,6 +30,8 @@ data class ScanResponse(
         @SerialName("also_at") val alsoAt: List<String>,
         val shipped: Boolean,
         val warnings: List<String>,
+        val content: String?,
+        @SerialName("content_html") val contentHtml: String?,
     )
 
     @Serializable
@@ -44,7 +46,11 @@ data class ScanResponse(
                 commit = result.commit,
             ),
             result.skills.map {
-                SkillJson(it.name, it.description, shortenDescription(it.description), it.path, it.alsoAt, it.shipped, it.warnings)
+                val content = result.contents[it.path]
+                SkillJson(
+                    it.name, it.description, shortenDescription(it.description), it.path, it.alsoAt, it.shipped, it.warnings,
+                    content, content?.let(SkillMarkdown::render),
+                )
             },
             result.ignored.map { IgnoredJson(it.path, it.reason) },
         )

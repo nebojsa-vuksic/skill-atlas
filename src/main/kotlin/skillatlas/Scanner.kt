@@ -28,7 +28,7 @@ class Scanner(
             git.shallowClone(cloneUrl(repository), branch, checkout, repository)
             val commit = git.headCommit(checkout)
             val catalog = SkillCatalog.build(checkout, SkillScanner.discover(checkout), repository.name)
-            ScanResult(metadata, branch, commit, catalog.skills, catalog.ignored)
+            ScanResult(metadata, branch, commit, catalog.skills, catalog.ignored, catalog.contents)
         }
     }
 

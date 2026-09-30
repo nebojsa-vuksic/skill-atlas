@@ -33,7 +33,9 @@ build/install/skill-atlas/bin/skill-atlas serve            # http://127.0.0.1:84
 build/install/skill-atlas/bin/skill-atlas serve --port 0   # any free port
 ```
 
-This serves a local page on top of the same scanner. Open the printed URL, or link
+This serves a local page on top of the same scanner. Skills are listed on the left;
+click one, or use ↑/↓, to see its full description and `SKILL.md` content on the right.
+Drag the divider to resize the panes. Open the printed URL, or link
 straight to a scan with `http://127.0.0.1:8421/?url=https://github.com/anthropics/skills`.
 The JSON API is `GET /api/scan?url=<repository-url>`.
 
@@ -51,8 +53,9 @@ Every successful scan is appended as one JSON line to
 This runs the unit tests (`./gradlew test`) and the CLI integration tests
 (`./gradlew integrationTest`). The integration tests run the installed `skill-atlas`
 launcher as a separate process against local fixture repositories and a stub GitHub API,
-including one run inside a pseudo-terminal. They need `git` and `python3`, but no
-network access.
+including one run inside a pseudo-terminal, and drive the web view in headless Chromium
+with Playwright. They need `git` and `python3`. The first run downloads Chromium once
+(`./gradlew installPlaywrightChromium`); after that, no network access is needed.
 
 CI runs the same build on Linux and macOS for every push and pull request. See the
 definition of done in [`specs/spec.md`](specs/spec.md#12-definition-of-done): every

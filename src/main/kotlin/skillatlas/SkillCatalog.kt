@@ -48,13 +48,20 @@ enum class SkillLocation {
 }
 
 /** The skills of a repository after handling duplicates, product copies and test data (spec section 4.4). */
-data class Catalog(val skills: List<Skill>, val ignored: List<IgnoredSkill>)
+data class Catalog(
+    val skills: List<Skill>,
+    val ignored: List<IgnoredSkill>,
+    /** The exact text of each listed skill's file, keyed by [Skill.path]; missing when not readable as UTF-8. */
+    val contents: Map<String, String> = emptyMap(),
+)
 
 object SkillCatalog {
     const val TEST_DATA = "test data"
     const val DUPLICATE_NAME = "duplicate name"
 
-    private class Copy(val skill: Skill, val location: SkillLocation, val contentHash: String?)
+    private class Copy(val skill: Skill, val location: SkillLocation, val bytes: ByteArray?) {
+        val contentHash: String? = bytes?.let { sha256(it) }
+    }
 
     /** Builds the catalog from [skillFiles], paths relative to [root] as returned by [SkillScanner.discover]. */
     fun build(root: Path, skillFiles: List<Path>, rootName: String): Catalog {
@@ -67,37 +74,39 @@ object SkillCatalog {
                 ignored += IgnoredSkill(directory, TEST_DATA)
                 continue
             }
-            copies += Copy(SkillParser.parse(root, file, rootName), location, contentHash(root.resolve(file)))
+            copies += Copy(SkillParser.parse(root, file, rootName), location, readSmallFile(root.resolve(file)))
         }
 
-        // Byte-for-byte identical skill files are one skill with several copies.
-        val merged = copies
+        // Byte-for-byte identical skill files are one skill; its main copy comes first.
+        val groups = copies
             .groupBy { it.contentHash ?: "unhashed:${it.skill.path}" }
             .values
-            .map { group ->
-                val ordered = group.sortedWith(compareBy<Copy> { it.location.ordinal }.thenBy { it.skill.path })
-                ordered.first().skill.copy(
-                    alsoAt = ordered.drop(1).map { it.skill.path },
-                    shipped = group.any { it.location == SkillLocation.PRODUCT },
-                )
-            }
+            .map { group -> group.sortedWith(compareBy<Copy> { it.location.ordinal }.thenBy { it.skill.path }) }
+        val entries = groups.map { group ->
+            group.first().skill.copy(
+                alsoAt = group.drop(1).map { it.skill.path },
+                shipped = group.any { it.location == SkillLocation.PRODUCT },
+            )
+        }
+        val contents = groups
+            .mapNotNull { group -> group.first().bytes?.let(SkillParser::decodeUtf8)?.let { group.first().skill.path to it } }
+            .toMap()
 
         // Different skills that share a name are both listed, and flagged.
-        val nameCounts = merged.groupingBy { it.name }.eachCount()
-        val skills = merged
+        val nameCounts = entries.groupingBy { it.name }.eachCount()
+        val skills = entries
             .map { if (nameCounts.getValue(it.name) > 1) it.copy(warnings = it.warnings + DUPLICATE_NAME) else it }
             .sortedBy { it.path }
-        return Catalog(skills, ignored.sortedBy { it.path })
+        return Catalog(skills, ignored.sortedBy { it.path }, contents)
     }
 
-    /** SHA-256 of the file, or null when it is too large or unreadable, so it is never merged. */
-    private fun contentHash(file: Path): String? = try {
-        if (Files.size(file) > SkillParser.MAX_FILE_SIZE) {
-            null
-        } else {
-            MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file)).joinToString("") { "%02x".format(it) }
-        }
+    /** The file's bytes, or null when it is too large or unreadable, so it is never merged. */
+    private fun readSmallFile(file: Path): ByteArray? = try {
+        if (Files.size(file) > SkillParser.MAX_FILE_SIZE) null else Files.readAllBytes(file)
     } catch (_: IOException) {
         null
     }
+
+    private fun sha256(bytes: ByteArray) =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 }

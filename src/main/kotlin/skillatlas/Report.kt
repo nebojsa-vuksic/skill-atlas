@@ -7,6 +7,8 @@ data class ScanResult(
     val skills: List<Skill>,
     /** Skill files that are not skills of this repository, such as test fixtures (spec section 4.4). */
     val ignored: List<IgnoredSkill> = emptyList(),
+    /** The exact text of each skill's file, keyed by [Skill.path] (spec section 5.4). */
+    val contents: Map<String, String> = emptyMap(),
 )
 
 /** Renders the plain text report (spec section 5.2). */
