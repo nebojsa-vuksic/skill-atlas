@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skill Atlas</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1><span class="badge">SKILL ATLAS</span></h1>
+      <p class="tagline">List the agent skills defined in a GitHub repository.</p>
+    </header>
+
+    <form id="scan-form" autocomplete="off">
+      <label for="url">GitHub repository</label>
+      <div class="row">
+        <input id="url" name="url" type="text" required spellcheck="false"
+               placeholder="https://github.com/owner/repo">
+        <button id="scan-button" type="submit">Scan</button>
+      </div>
+    </form>
+
+    <p id="status" class="status" role="status" hidden><span class="spinner" aria-hidden="true"></span><span id="status-text"></span></p>
+    <p id="error" class="error" role="alert" hidden></p>
+
+    <section id="result" hidden>
+      <dl class="repository">
+        <dt>Repository</dt>
+        <dd><a id="repo-name" class="repo-name" target="_blank" rel="noopener noreferrer"></a></dd>
+        <dt>Description</dt>
+        <dd id="repo-description" class="repo-description"></dd>
+        <dt>Commit</dt>
+        <dd><code id="commit" class="commit"></code> <span id="branch" class="branch"></span></dd>
+      </dl>
+
+      <h2 id="skill-count" class="skill-count"></h2>
+      <ul id="skills" class="skills"></ul>
+    </section>
+  </main>
+</body>
+</html>

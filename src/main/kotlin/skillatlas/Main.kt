@@ -9,13 +9,22 @@ import com.github.ajalt.clikt.core.ProgramResult
 import com.github.ajalt.clikt.core.parse
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.options.check
+import com.github.ajalt.clikt.parameters.options.default
+import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.versionOption
+import com.github.ajalt.clikt.parameters.types.int
 import com.jakewharton.mosaic.tty.Tty
 import java.io.FileDescriptor
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.PrintStream
 import java.time.Clock
+import java.util.concurrent.CountDownLatch
 import kotlin.system.exitProcess
+
+/** Default port for `skill-atlas serve`. */
+const val DEFAULT_PORT = 8421
 
 val VERSION: String = SkillAtlasCli::class.java.`package`?.implementationVersion ?: "dev"
 
@@ -57,7 +66,7 @@ class SkillAtlasCli(
     private val clock: Clock = Clock.systemUTC(),
 ) {
     fun run(args: List<String>): Int {
-        val command = RootCommand().subcommands(ScanCommand())
+        val command = RootCommand().subcommands(ScanCommand(), ServeCommand())
         return try {
             command.parse(args)
             ExitCode.OK
@@ -86,6 +95,29 @@ class SkillAtlasCli(
         override fun help(context: Context) = "List the agent skills defined in a GitHub repository."
 
         override fun run() = Unit
+    }
+
+    private inner class ServeCommand : CoreCliktCommand(name = "serve") {
+        private val port by option("-p", "--port", metavar = "<port>", help = "Port to listen on; 0 picks a free one")
+            .int()
+            .default(DEFAULT_PORT)
+            .check("must be between 0 and 65535") { it in 0..65535 }
+
+        override fun help(context: Context) = "Serve the local web view on 127.0.0.1."
+
+        override fun run() {
+            val server = try {
+                WebServer(scanner, scanLog, clock, err::println).start(port)
+            } catch (e: IOException) {
+                err.println("error: could not listen on 127.0.0.1:$port: ${e.message}")
+                throw ProgramResult(ExitCode.INTERNAL_ERROR)
+            }
+            out.println("Skill Atlas web view: ${server.url}")
+            out.println("Press Ctrl-C to stop.")
+            out.flush()
+            // Serve until the process is stopped.
+            CountDownLatch(1).await()
+        }
     }
 
     private inner class ScanCommand : CoreCliktCommand(name = "scan") {

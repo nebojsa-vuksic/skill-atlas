@@ -28,6 +28,7 @@ skill-atlas scan <github-project-url>
 
 ```
 skill-atlas scan <github-project-url>
+skill-atlas serve [--port <port>]
 skill-atlas --help
 skill-atlas --version
 ```
@@ -58,6 +59,7 @@ with exit code `2` (see section 7).
 |--------|---------|-------------|
 | `-h, --help` | | Print usage and exit `0`. |
 | `-V, --version` | | Print the version and exit `0`. |
+| `-p, --port <port>` | `8421` | `serve` only. Port for the web view. `0` picks a free port. |
 
 ## 4. Behavior
 
@@ -221,6 +223,73 @@ three lines:
 
 The scan log (section 6) does not store skill descriptions, so nothing is lost there.
 
+### 5.4 Web view
+
+`skill-atlas serve` starts a local web server with the same scan behavior as `scan`.
+It uses the same URL parsing, GitHub metadata, clone, discovery, parsing, shortening,
+and scan log. The server runs until it is stopped with Ctrl-C.
+
+On start it prints this to stdout:
+
+```
+Skill Atlas web view: http://127.0.0.1:8421/
+Press Ctrl-C to stop.
+```
+
+If the port is taken, it exits `1` with `error: could not listen on 127.0.0.1:<port>: <reason>`.
+
+**Page.** `GET /` serves a single page with a repository URL field and a Scan button.
+While a scan runs, the page shows a spinner and `Scanning <url>…`. The result uses the
+same highlights as the rich terminal view:
+
+| Part | Style |
+|------|-------|
+| Repository name | bold, accent color, links to the repository on GitHub |
+| Repository description | italic; `(none)` in a muted color |
+| Commit hash | bold monospace, amber |
+| Branch | pill with a magenta outline |
+| Skill count | green; `No skills found.` in amber |
+| Skill name | bold, accent color, with a `●` bullet |
+| Skill description | the shortened form (section 5.3); the full text is shown on hover |
+| Skill path | muted monospace |
+| Warnings | amber `⚠ …` badges |
+
+Errors are shown as `error: <message>`, using the same messages as section 7. Opening
+`/?url=<repository-url>` starts a scan right away. The page follows the system's light
+or dark color scheme and works at phone widths.
+
+**API.** `GET /api/scan?url=<repository-url>` returns JSON:
+
+```json
+{
+  "repository": {"name": "acme/skills", "description": "Acme agent skills", "branch": "main", "commit": "<sha>"},
+  "skills": [
+    {"name": "pdf-extract", "description": "<full>", "short_description": "<shortened>", "path": "skills/pdf", "warnings": []}
+  ]
+}
+```
+
+Failures return `{"error": "<message>", "exit_code": <code>}`, with the message and code
+from section 7. The HTTP status depends on the exit code:
+
+| Exit code | HTTP status |
+|-----------|-------------|
+| `2` (usage), or no `url` parameter | `400` |
+| `3` (repository not found) | `404` |
+| `4` (branch not found) | `422` |
+| `5` (network or rate limit) | `502` |
+| `1` (unexpected) | `500` |
+
+Every successful scan made through the API appends one line to the scan log.
+
+**Security:**
+- The server listens on `127.0.0.1` only.
+- It rejects requests whose `Host` header is not `127.0.0.1:<port>` or
+  `localhost:<port>` with `403`. This blocks DNS rebinding.
+- It answers only `GET`; other methods get `405`.
+- It serves a strict `Content-Security-Policy` (`default-src 'self'`).
+- The page inserts repository content as text, never as HTML.
+
 ## 6. Scan log
 
 Every successful scan is logged, in addition to the report on stdout.
@@ -288,6 +357,8 @@ skill (section 4.3).
 9. When stdout is piped, e.g. `skill-atlas scan <url> | cat`, the output is the plain
    format from section 5.2 with no escape codes.
 10. No skill description in either format is longer than 100 characters plus `…`.
+11. `skill-atlas serve` shows the same results in a browser at `http://127.0.0.1:8421/`,
+    with the highlights from section 5.4.
 
 ## 11. Testing
 
@@ -355,6 +426,10 @@ They are meant for tests only.
 | Piped stdout | No escape codes anywhere in the output |
 | Rich view in a pseudo-terminal | Escape codes are present, and the report text matches section 5.1 |
 | Ctrl-C while fetching metadata, in the rich view | Exit `130`, `error: scan interrupted`, temp directory removed |
+| `serve --port 0` | Prints the URL. `GET /` returns the page; `/app.js` and `/style.css` return the assets |
+| Web API scan | Exact JSON body; one scan log line; temp directory removed |
+| Web API errors | Invalid URL `400`, unknown repository `404`, missing `url` `400`; exact JSON bodies |
+| Web security | Foreign `Host` header `403`; `POST` `405`; unknown path `404`; CSP header present |
 
 ### 11.3 Continuous integration
 

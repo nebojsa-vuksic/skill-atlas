@@ -93,6 +93,32 @@ class Sandbox(private val root: Path) : AutoCloseable {
         return execute(command)
     }
 
+    /**
+     * Starts `skill-atlas serve --port 0` and waits until it prints its URL. Stop it with
+     * [WebView.close]; the test fails if it doesn't announce itself in time.
+     */
+    fun startWebView(): WebView {
+        val process = ProcessBuilder(LAUNCHER.toString(), "serve", "--port", "0")
+            .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .apply { environment().apply { clear(); putAll(cliEnvironment()) } }
+            .start()
+        val announced = java.util.concurrent.CompletableFuture<String>()
+        thread(isDaemon = true) {
+            process.inputStream.bufferedReader().forEachLine { line ->
+                WEB_VIEW_LINE.matchEntire(line)?.let { announced.complete(it.groupValues[1]) }
+            }
+            announced.completeExceptionally(IllegalStateException("serve exited without printing its URL"))
+        }
+        val url = try {
+            announced.get(PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        } catch (e: Exception) {
+            process.destroyForcibly()
+            throw e
+        }
+        return WebView(url, process)
+    }
+
     private fun execute(command: List<String>): CliRun {
         val process = ProcessBuilder(command)
             .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
@@ -139,6 +165,8 @@ class Sandbox(private val root: Path) : AutoCloseable {
     private companion object {
         const val PROCESS_TIMEOUT_SECONDS = 120L
 
+        val WEB_VIEW_LINE = Regex("Skill Atlas web view: (http://127\\.0\\.0\\.1:\\d+/)")
+
         /** Only what the launcher needs to find a JVM and basic tools. Notably not GITHUB_TOKEN. */
         val INHERITED_VARIABLES = setOf("PATH", "HOME", "USER", "LANG", "JAVA_HOME", "SYSTEMROOT")
 
@@ -159,6 +187,43 @@ class Sandbox(private val root: Path) : AutoCloseable {
         } catch (_: IOException) {
             ""
         }
+    }
+}
+
+/** A running `skill-atlas serve` process. */
+class WebView(val url: String, private val process: Process) : AutoCloseable {
+    private val http = java.net.http.HttpClient.newHttpClient()
+
+    class Response(val status: Int, val body: String, val headers: Map<String, List<String>>) {
+        fun header(name: String) = headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
+        override fun toString() = "HTTP $status\n$body"
+    }
+
+    fun get(path: String): Response = send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + path.removePrefix("/"))).GET())
+
+    fun post(path: String): Response = send(
+        java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + path.removePrefix("/")))
+            .POST(java.net.http.HttpRequest.BodyPublishers.noBody()),
+    )
+
+    /** Sends a raw request with a custom Host header, which the JDK HTTP client refuses to set. */
+    fun statusWithHost(host: String): Int {
+        val uri = java.net.URI.create(url)
+        java.net.Socket(uri.host, uri.port).use { socket ->
+            socket.getOutputStream().write("GET / HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n".toByteArray())
+            val statusLine = socket.getInputStream().bufferedReader().readLine()
+            return statusLine.split(' ')[1].toInt()
+        }
+    }
+
+    private fun send(request: java.net.http.HttpRequest.Builder): Response {
+        val response = http.send(request.build(), java.net.http.HttpResponse.BodyHandlers.ofString())
+        return Response(response.statusCode(), response.body(), response.headers().map())
+    }
+
+    override fun close() {
+        process.destroy()
+        if (!process.waitFor(10, TimeUnit.SECONDS)) process.destroyForcibly()
     }
 }
 
