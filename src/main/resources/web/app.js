@@ -1,4 +1,4 @@
-// Skill Atlas web view: calls GET /api/scan and renders the result (spec section 5.4).
+// Skill Atlas web view: calls GET /api/scans and renders the result (spec sections 5.4 and 5.10).
 // Repository content is inserted with textContent. The one exception is content_html,
 // which the server renders from Markdown with raw HTML escaped and unsafe links removed.
 "use strict";
@@ -11,7 +11,10 @@ const WIDTH_KEY = "skill-atlas.left-fraction";
 
 const SNIPPET_CONTEXT = 40;
 
-let current = null; // { result, selected, shown, visible }
+// The loaded repositories, as the URLs the user gave, in the order they were added.
+let repositoryUrls = [];
+// { repositories, skills, ignored, multi, selected, shown, visible }; skills[i] matches items()[i].
+let current = null;
 let activeTab = "rendered";
 
 function show(element, visible) {
@@ -58,24 +61,72 @@ function paths(skill) {
   ];
 }
 
+function repositoryOf(skill) {
+  return current.repositories.find((repository) => repository.name === skill.repository);
+}
+
 function githubUrl(repository, path) {
   return "https://github.com/" + repository.name + "/blob/" + repository.commit + "/" +
     (path === "." ? "" : path + "/");
 }
 
-// ---- URL state: ?url=<repository>&skill=<path>&q=<filter> ----
+// "owner/repo" from any accepted URL form, lowercased, to tell whether two URLs are the same repository.
+function repositoryKey(url) {
+  const match = url.trim().replace(/\.git$/i, "").replace(/\/+$/, "")
+    .match(/github\.com[/:]([^/\s]+)\/([^/\s]+)$/i);
+  return match ? (match[1] + "/" + match[2]).toLowerCase() : url.trim().toLowerCase();
+}
 
-function writeLocation(url, skillPath, query = "") {
+// ---- URL state: ?url=<a>&url=<b>&skill=<id or path>&q=<filter> ----
+
+function writeLocation(skillKey, query = "") {
   const params = new URLSearchParams();
-  params.set("url", url);
-  if (skillPath) params.set("skill", skillPath);
+  for (const url of repositoryUrls) params.append("url", url);
+  if (skillKey) params.set("skill", skillKey);
   if (query.trim()) params.set("q", query);
   history.replaceState(null, "", "?" + params.toString());
 }
 
 function updateLocation() {
-  const shown = current && current.shown >= 0 ? current.result.skills[current.shown].path : null;
-  writeLocation($("url").value.trim(), shown, $("filter").value);
+  let key = null;
+  if (current && current.shown >= 0) {
+    const skill = current.skills[current.shown];
+    // One repository keeps the plain path, as before; several need the full id.
+    key = current.multi ? skill.id : skill.path;
+  }
+  writeLocation(key, $("filter").value);
+}
+
+// ---- Repository chips ----
+
+function renderChips() {
+  const chips = (current ? current.repositories : []).map((repository) => {
+    const chip = element("span", "chip" + (repository.error ? " failed" : ""));
+    chip.dataset.url = repository.url;
+    chip.append(element("span", "chip-name", repository.name || repository.url));
+    chip.append(element("span", "chip-count", repository.error ? "failed" : String(repository.skill_count)));
+    const remove = element("button", "chip-remove", "×");
+    remove.type = "button";
+    remove.title = "Remove " + (repository.name || repository.url);
+    remove.setAttribute("aria-label", remove.title);
+    remove.addEventListener("click", () => removeRepository(repository.url));
+    chip.append(remove);
+    return chip;
+  });
+  $("repo-chips").replaceChildren(...chips);
+  show($("repo-chips"), chips.length > 0);
+}
+
+function removeRepository(url) {
+  repositoryUrls = repositoryUrls.filter((existing) => repositoryKey(existing) !== repositoryKey(url));
+  if (repositoryUrls.length === 0) {
+    current = null;
+    show($("result"), false);
+    renderChips();
+    history.replaceState(null, "", "?");
+    return;
+  }
+  scan(null, $("filter").value);
 }
 
 // ---- Left pane: the skill list ----
@@ -103,6 +154,8 @@ function renderSkillItem(skill, index) {
   item.setAttribute("aria-selected", "false");
   item.tabIndex = -1;
   item.dataset.path = skill.path;
+  item.dataset.id = skill.id;
+  item.dataset.repository = skill.repository;
 
   const head = element("span", "skill-head");
   head.append(element("span", "skill-name", skill.name), ...icons(skill));
@@ -117,10 +170,31 @@ function renderSkillItem(skill, index) {
   return item;
 }
 
-// ---- Filter (spec section 5.5) ----
+function renderGroupHeader(repository) {
+  const header = element("div", "group-header");
+  header.setAttribute("role", "presentation");
+  header.dataset.repository = repository.name;
+  header.append(element("span", "group-name", repository.name), element("span", "group-count", ""));
+  return header;
+}
+
+// ---- Filter (spec sections 5.5 and 5.10) ----
+
+// The query's words, and its repo:<text> qualifiers, lowercased.
+function parseQuery(query) {
+  const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return {
+    words: tokens.filter((token) => !token.startsWith("repo:")),
+    repositories: tokens.filter((token) => token.startsWith("repo:")).map((token) => token.slice(5)).filter(Boolean),
+  };
+}
 
 function queryWords(query) {
-  return query.toLowerCase().split(/\s+/).filter(Boolean);
+  return parseQuery(query).words;
+}
+
+function matchesRepository(name, repositories) {
+  return repositories.length === 0 || repositories.some((text) => name.toLowerCase().includes(text));
 }
 
 function matches(skill, words) {
@@ -210,21 +284,29 @@ function fillItem(item, skill, words) {
 function applyFilter() {
   if (!current) return;
   const query = $("filter").value;
-  const words = queryWords(query);
-  const skills = current.result.skills;
+  const { words, repositories } = parseQuery(query);
+  const skills = current.skills;
   current.visible = [];
+  const visibleByRepository = new Map();
   items().forEach((item, i) => {
-    const visible = matches(skills[i], words);
+    const skill = skills[i];
+    const visible = matchesRepository(skill.repository, repositories) && matches(skill, words);
     item.hidden = !visible;
     if (visible) {
       current.visible.push(i);
-      fillItem(item, skills[i], words);
+      visibleByRepository.set(skill.repository, (visibleByRepository.get(skill.repository) || 0) + 1);
+      fillItem(item, skill, words);
     }
   });
+  for (const header of $("skills").querySelectorAll(".group-header")) {
+    const count = visibleByRepository.get(header.dataset.repository) || 0;
+    header.hidden = count === 0;
+    header.querySelector(".group-count").textContent = String(count);
+  }
 
   const count = $("filter-count");
   count.textContent = current.visible.length + " of " + skills.length;
-  count.classList.toggle("active", words.length > 0);
+  count.classList.toggle("active", words.length + repositories.length > 0);
   $("no-match").textContent = 'No skills match "' + query.trim() + '".';
   show($("no-match"), current.visible.length === 0);
 
@@ -304,25 +386,25 @@ function fixLinks(container, base) {
   }
 }
 
-// Lists the skills most like this one (spec section 5.6); the server computes the scores.
+// Lists the skills most like this one (spec sections 5.6 and 5.10); the server computes the scores.
 function renderSimilar(skill) {
   const rows = skill.similar.map((similar) => {
     const row = element("button", "similar-row");
     row.type = "button";
     row.dataset.path = similar.path;
+    row.dataset.id = similar.id;
     row.title = "Similarity " + similar.score + " %";
     const bar = element("span", "similar-bar");
     bar.setAttribute("aria-hidden", "true");
     const fill = element("span", "similar-fill");
     fill.style.width = similar.score + "%";
     bar.append(fill);
-    row.append(
-      element("span", "similar-name", similar.name),
-      element("span", "similar-path", similar.path),
-      bar,
-      element("span", "similar-score", similar.score + " %"),
-    );
-    row.addEventListener("click", () => selectPath(similar.path));
+    const where = element("span", "similar-path", similar.path);
+    if (similar.repository !== skill.repository) {
+      where.prepend(element("span", "similar-repo", similar.repository + " · "));
+    }
+    row.append(element("span", "similar-name", similar.name), where, bar, element("span", "similar-score", similar.score + " %"));
+    row.addEventListener("click", () => selectId(similar.id));
     return row;
   });
   $("similar-list").replaceChildren(...rows);
@@ -334,17 +416,22 @@ function clearFilter() {
   if ($("filter").value !== "") setFilter("");
 }
 
-// Selects the skill at a path, clearing the filter first if it hides that skill.
-function selectPath(path) {
+// Selects the skill with an id, clearing the filter first if it hides that skill.
+function selectId(id) {
   if (!current) return;
-  const index = current.result.skills.findIndex((skill) => skill.path === path);
+  const index = current.skills.findIndex((skill) => skill.id === id);
   if (index < 0) return;
-  const item = items().find((option) => option.dataset.path === path);
+  const item = items()[index];
   if (!item || item.getClientRects().length === 0) clearFilter();
   select(index, { focus: true });
 }
 
-function renderDetail(skill, repository) {
+function renderDetail(skill) {
+  const repository = repositoryOf(skill);
+  const repo = $("detail-repo");
+  repo.textContent = skill.repository;
+  show(repo, current.multi);
+
   const name = $("detail-name");
   name.textContent = skill.name;
   name.append(...badges(skill));
@@ -398,7 +485,7 @@ function showNothing() {
 }
 
 function select(index, { focus = false } = {}) {
-  if (!current || index < 0 || index >= current.result.skills.length) return;
+  if (!current || index < 0 || index >= current.skills.length) return;
   current.selected = index;
   current.shown = index;
   markSelected(index);
@@ -407,7 +494,7 @@ function select(index, { focus = false } = {}) {
   if (focus) all[index].focus({ preventScroll: true });
 
   show($("detail"), true);
-  renderDetail(current.result.skills[index], current.result.repository);
+  renderDetail(current.skills[index]);
   updateLocation();
   if (focus && window.matchMedia("(max-width: 759px)").matches) {
     $("detail").scrollIntoView({ block: "start", behavior: "smooth" });
@@ -470,13 +557,12 @@ $("divider").addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("resize", () => {
-  if (current && current.result.skills.length > 0) applyStoredWidth();
+  if (current && current.skills.length > 0) applyStoredWidth();
 });
 
 // ---- Result ----
 
-function render(result, preferredPath, query) {
-  const repository = result.repository;
+function renderSingleSummary(repository) {
   const name = $("repo-name");
   name.textContent = repository.name;
   name.href = "https://github.com/" + repository.name;
@@ -487,46 +573,105 @@ function render(result, preferredPath, query) {
 
   $("commit").textContent = repository.commit;
   $("branch").textContent = repository.branch;
+}
 
-  const count = result.skills.length;
+function renderSummaryTable(repositories) {
+  const rows = repositories.map((repository) => {
+    const row = element("tr", repository.error ? "failed" : "");
+    row.dataset.url = repository.url;
+    const nameCell = element("td");
+    if (repository.error) {
+      nameCell.append(element("span", "repo-name", repository.name || repository.url));
+      const error = element("td", "error-cell", "error: " + repository.error);
+      error.colSpan = 3;
+      row.append(nameCell, error);
+      return row;
+    }
+    const link = element("a", "repo-name", repository.name);
+    link.href = "https://github.com/" + repository.name;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    nameCell.append(link);
+    const description = element("td", "repo-description" + (repository.description ? "" : " none"), repository.description || "(none)");
+    const commit = element("td");
+    commit.append(element("code", "commit", repository.commit.slice(0, 12)), " ", element("span", "branch", repository.branch));
+    row.append(nameCell, description, commit, element("td", "count", String(repository.skill_count)));
+    return row;
+  });
+  $("repo-rows").replaceChildren(...rows);
+}
+
+function render(body, preferredSkill, query) {
+  const scanned = body.repositories.filter((repository) => !repository.error);
+  const multi = body.repositories.length > 1;
+  current = { repositories: body.repositories, skills: body.skills, ignored: body.ignored, multi, selected: 0, shown: -1, visible: [] };
+  renderChips();
+
+  // One repository that failed looks exactly like it did before: an error, no result.
+  if (!multi && scanned.length === 0) {
+    $("error").textContent = "error: " + body.repositories[0].error;
+    show($("error"), true);
+    show($("result"), false);
+    return;
+  }
+
+  show($("repo-table"), multi);
+  show($("repository"), !multi);
+  if (multi) renderSummaryTable(body.repositories);
+  else renderSingleSummary(scanned[0]);
+
+  const count = body.skills.length;
   const heading = $("skill-count");
   heading.textContent = count === 0 ? "No skills found." : count + (count === 1 ? " skill found" : " skills found");
   heading.classList.toggle("empty", count === 0);
 
-  $("skills").replaceChildren(...result.skills.map(renderSkillItem));
+  const nodes = [];
+  body.skills.forEach((skill, index) => {
+    if (multi && (index === 0 || body.skills[index - 1].repository !== skill.repository)) {
+      nodes.push(renderGroupHeader(body.repositories.find((repository) => repository.name === skill.repository)));
+    }
+    nodes.push(renderSkillItem(skill, index));
+  });
+  $("skills").replaceChildren(...nodes);
   show($("split"), count > 0);
 
-  const ignored = result.ignored;
+  const ignored = body.ignored;
   $("ignored-heading").textContent = "Ignored " + ignored.length + " test " +
     (ignored.length === 1 ? "fixture" : "fixtures") + " (not skills)";
-  $("ignored-list").replaceChildren(...ignored.map((entry) => element("li", "skill-path", entry.path)));
+  $("ignored-list").replaceChildren(...ignored.map((entry) =>
+    element("li", "skill-path", multi ? entry.repository + ":" + entry.path : entry.path)));
   show($("ignored"), ignored.length > 0);
 
   show($("result"), true);
-  const preferred = result.skills.findIndex((skill) => skill.path === preferredPath);
-  current = { result, selected: Math.max(preferred, 0), shown: -1, visible: [] };
+  // The skill from the URL, given as an id or, with one repository, as a path.
+  const preferred = body.skills.findIndex((skill) => skill.id === preferredSkill || skill.path === preferredSkill);
+  current.selected = Math.max(preferred, 0);
   $("filter").value = query || "";
   if (count > 0) {
     applyStoredWidth();
     applyFilter();
+  } else {
+    updateLocation();
   }
 }
 
-async function scan(url, preferredPath, query) {
+// Scans every loaded repository; the server reuses recent results, so only new ones are cloned.
+async function scan(preferredSkill, query) {
   document.body.dataset.state = "scanning";
   show($("error"), false);
-  show($("result"), false);
-  current = null;
-  setBusy(true, "Scanning " + url + "…");
+  setBusy(true, "Scanning " + repositoryUrls.join(", ") + "…");
   try {
-    const response = await fetch("/api/scan?url=" + encodeURIComponent(url));
+    const params = new URLSearchParams();
+    for (const url of repositoryUrls) params.append("url", url);
+    const response = await fetch("/api/scans?" + params.toString());
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "HTTP " + response.status);
     setBusy(false);
-    render(body, preferredPath, query);
+    render(body, preferredSkill, query);
   } catch (error) {
     $("error").textContent = "error: " + error.message;
     show($("error"), true);
+    show($("result"), false);
   } finally {
     setBusy(false);
     document.body.dataset.state = "idle";
@@ -535,17 +680,21 @@ async function scan(url, preferredPath, query) {
 
 $("scan-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  const url = $("url").value.trim();
-  if (!url) return;
-  writeLocation(url, null);
-  scan(url, null, "");
+  const added = $("url").value.split(/[\s,]+/).map((url) => url.trim()).filter(Boolean);
+  if (added.length === 0 && repositoryUrls.length === 0) return;
+  for (const url of added) {
+    if (!repositoryUrls.some((existing) => repositoryKey(existing) === repositoryKey(url))) repositoryUrls.push(url);
+  }
+  $("url").value = "";
+  const keep = current && current.shown >= 0 ? current.skills[current.shown].id : null;
+  scan(keep, $("filter").value);
 });
 
-// A link like /?url=https://github.com/owner/repo&skill=skills/pdf&q=test starts a scan right away.
+// A link like /?url=a&url=b&skill=owner/repo:path&q=test starts a scan right away.
 const initial = new URLSearchParams(location.search);
-if (initial.get("url")) {
-  $("url").value = initial.get("url");
-  scan(initial.get("url"), initial.get("skill"), initial.get("q"));
+repositoryUrls = initial.getAll("url").filter(Boolean);
+if (repositoryUrls.length > 0) {
+  scan(initial.get("skill"), initial.get("q"));
 } else {
   document.body.dataset.state = "idle";
 }

@@ -81,8 +81,6 @@ internal fun Report(result: ScanResult, columns: Int) = Report(Presentation.Skil
 
 @Composable
 internal fun Report(presentation: Presentation, columns: Int) {
-    val result = presentation.result
-    val repository = result.repository
     // One column of padding plus a two-column skill indent, and one spare so lines never wrap.
     // Terminals that report no size get the full limit.
     val descriptionLength =
@@ -92,29 +90,52 @@ internal fun Report(presentation: Presentation, columns: Int) {
         Text(" SKILL ATLAS ", textStyle = TextStyle.Bold + TextStyle.Invert)
         Text("")
 
-        Field("Repository") {
-            Text(sanitize(repository.fullName), color = Color.Cyan, textStyle = TextStyle.Bold)
-        }
-        Field("Description") {
-            val description = repository.description?.let(::shortenDescription)?.ifBlank { null }
-            if (description == null) {
-                Text("(none)", textStyle = TextStyle.Dim)
-            } else {
-                Text(description, textStyle = TextStyle.Italic)
+        when (presentation) {
+            is Presentation.SkillList -> {
+                RepositoryHeader(presentation.result)
+                SkillListReport(presentation, descriptionLength)
+            }
+            is Presentation.SkillDetail -> {
+                RepositoryHeader(presentation.result)
+                SkillDetailReport(presentation)
+            }
+            is Presentation.MultiList -> {
+                presentation.lists.forEachIndexed { i, list ->
+                    if (i > 0) {
+                        Text("")
+                        Text(REPOSITORY_SEPARATOR.take(if (columns > 2) minOf(80, columns - 2) else 80), textStyle = TextStyle.Dim)
+                        Text("")
+                    }
+                    RepositoryHeader(list.result)
+                    SkillListReport(list, descriptionLength)
+                }
+                if (presentation.lists.isNotEmpty()) Text("")
+                Text(presentation.summary, color = Color.Green, textStyle = TextStyle.Bold)
             }
         }
-        Field("Commit") {
-            Text(result.commit, color = Color.Yellow, textStyle = TextStyle.Bold)
-            Text("  ")
-            Text(sanitize(result.branch), color = Color.Magenta)
-        }
-        Text("")
+    }
+}
 
-        when (presentation) {
-            is Presentation.SkillList -> SkillListReport(presentation, descriptionLength)
-            is Presentation.SkillDetail -> SkillDetailReport(presentation)
+@Composable
+private fun RepositoryHeader(result: ScanResult) {
+    val repository = result.repository
+    Field("Repository") {
+        Text(sanitize(repository.fullName), color = Color.Cyan, textStyle = TextStyle.Bold)
+    }
+    Field("Description") {
+        val description = repository.description?.let(::shortenDescription)?.ifBlank { null }
+        if (description == null) {
+            Text("(none)", textStyle = TextStyle.Dim)
+        } else {
+            Text(description, textStyle = TextStyle.Italic)
         }
     }
+    Field("Commit") {
+        Text(result.commit, color = Color.Yellow, textStyle = TextStyle.Bold)
+        Text("  ")
+        Text(sanitize(result.branch), color = Color.Magenta)
+    }
+    Text("")
 }
 
 @Composable

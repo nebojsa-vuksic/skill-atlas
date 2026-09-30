@@ -64,4 +64,21 @@ class SkillFilterTest {
     fun `leaves a short text whole in a snippet`() {
         assertEquals("short text with a match here", SkillFilter.snippet("short text with a match here", 18, 23))
     }
+
+    @Test
+    fun `separates repo qualifiers from words`() {
+        assertEquals(SkillFilter.Query(listOf("test"), listOf("mps")), SkillFilter.parse("repo:MPS test"))
+        assertEquals(SkillFilter.Query(emptyList(), listOf("mps", "koog")), SkillFilter.parse("repo:mps repo:koog"))
+        assertEquals(SkillFilter.Query(listOf("test"), emptyList()), SkillFilter.parse("repo: test"), "an empty qualifier is ignored")
+        assertEquals(listOf("test"), SkillFilter.words("repo:mps test"))
+    }
+
+    @Test
+    fun `matches repositories by any qualifier, ignoring case`() {
+        assertTrue(SkillFilter.parse("test").matchesRepository("JetBrains/MPS"))
+        assertTrue(SkillFilter.parse("repo:mps").matchesRepository("JetBrains/MPS"))
+        assertTrue(SkillFilter.parse("repo:koog repo:mps").matchesRepository("JetBrains/MPS"))
+        assertTrue(SkillFilter.parse("repo:jetbrains/").matchesRepository("JetBrains/MPS"))
+        assertFalse(SkillFilter.parse("repo:koog").matchesRepository("JetBrains/MPS"))
+    }
 }

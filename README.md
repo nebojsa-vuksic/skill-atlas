@@ -26,6 +26,22 @@ In a terminal the results are shown in a color-highlighted view built with
 [Mosaic](https://github.com/JakeWharton/mosaic), with a live status line while scanning.
 When stdout is piped or redirected, the tool prints plain text instead.
 
+### Several repositories
+
+```
+skill-atlas scan github.com/JetBrains/MPS github.com/JetBrains/koog --filter "repo:mps test"
+```
+
+`repo:<text>` narrows a search to repositories whose name contains `<text>`. The web view
+takes several URLs at once, groups the skills by repository, and finds similar skills
+across them.
+
+### Demos for pull requests
+
+`demo/record.sh <name>` records the scripted demo in `demo/<name>/` (Playwright for the web
+view, VHS for the terminal) into `build/demo/<name>/`. `demo/publish.sh <pr> <name>` pushes
+it to the `demos` branch and prints the Markdown for the PR. See spec section 13.
+
 ### Filter, skill details and interactive browsing
 
 ```

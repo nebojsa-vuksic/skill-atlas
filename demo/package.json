@@ -1,0 +1,9 @@
+{
+  "name": "skill-atlas-demo",
+  "private": true,
+  "description": "Scripted demo recordings for pull requests (spec section 13).",
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

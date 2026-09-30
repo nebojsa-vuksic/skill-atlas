@@ -31,7 +31,12 @@ class BrowseState(val result: ScanResult, private val similarByPath: Map<String,
         private set
 
     val words: List<String> get() = SkillFilter.words(query)
-    val visible: List<Skill> get() = SkillFilter.filter(result.skills, words)
+    val visible: List<Skill>
+        get() = if (SkillFilter.parse(query).matchesRepository(result.repository.fullName)) {
+            SkillFilter.filter(result.skills, words)
+        } else {
+            emptyList()
+        }
     val selected: Skill? get() = visible.firstOrNull { it.path == selectedPath }
     val similar: List<SimilarSkill> get() = selected?.let { similarByPath[it.path] }.orEmpty()
 

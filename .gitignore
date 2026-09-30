@@ -34,3 +34,6 @@ build/
 .idea/
 *.iml
 .DS_Store
+
+# Demo recordings (spec section 13)
+demo/node_modules/

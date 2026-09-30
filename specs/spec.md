@@ -743,9 +743,12 @@ repository's name, so the list points you to related skills elsewhere.
   Similar skills can come from any of the repositories, and their paths are then written
   as `<owner>/<repo>:<path>`.
 - **Scan log:** one line per successfully scanned repository.
-- **Failures:** each failed repository prints its `error: …` line (section 7) in its place,
-  and the other repositories are still reported. The exit code is the code of the **first**
-  failure in URL order. It is `0` only if every repository succeeded.
+- **Failures:** the report lists only the repositories that were scanned. Each failed
+  repository prints its `error: <owner>/<repo>: …` line (the section 7 message, prefixed
+  with the repository) to **stderr**, in URL order, after the report. The exit code is the
+  code of the **first** failure in URL order. It is `0` only if every repository succeeded.
+  `--skill` behaves the same way: it shows the skill if a scanned repository has it, and
+  still exits with the first failure's code.
 
 #### Web view
 
@@ -787,6 +790,11 @@ repository's name, so the list points you to related skills elsewhere.
   - With no `url` parameter, or more than 10 of them, it returns `400` with an `error` and
     `exit_code: 2`.
   - `GET /api/scan` stays as it is, for one repository.
+  - **Cache:** the server keeps each successfully scanned repository's result for **10
+    minutes**, keyed by `owner/name`. Within that time `/api/scans` reuses the result
+    without cloning again, and without adding another scan log line. Adding a repository
+    therefore scans only the new one, and removing one scans nothing. Similar skills are
+    always recomputed over the requested set. Failed repositories are never cached.
 
 ## 6. Scan log
 
@@ -1059,8 +1067,8 @@ Everything lives in `demo/`:
   the server again, including when a step fails. The results go to `build/demo/<name>/`.
 - `demo/<name>/web.mjs` is a Playwright script: it opens the web view, types, clicks, and
   pauses on each result long enough to read it (about 1.5 s).
-- `demo/<name>/terminal.tape` is a VHS script. It runs with the terminal at 120×32, the
-  font at 16 px, and a typing speed of 60 ms.
+- `demo/<name>/terminal.tape` is a VHS script. It records at 1400×820 px, with the font at
+  16 px and a typing speed of 60 ms.
 - `demo/publish.sh <pr-number> <name>` publishes the files (section 13.3) and prints the
   Markdown to paste into the pull request.
 

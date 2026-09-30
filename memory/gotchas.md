@@ -127,3 +127,18 @@ thinking.
 
 **How to apply:** check `git status` and whether a PR exists, not just the exit code. Resume
 with `claude -p --resume <session-id>`. The session ID is in the stream-json log.
+
+## macOS runs bash 3.2 for `#!/usr/bin/env bash` scripts (2026-09-30)
+
+Bash 4 features, such as `${var^}`, `mapfile`, and associative arrays, fail in `demo/*.sh`.
+
+**How to apply:** keep scripts to bash 3.2, and use `awk` or `tr` for case changes.
+`stat -f %z` is macOS and `stat -c %s` is Linux, so the demo scripts try both.
+
+## An exact JSON test must change when the page switches APIs (2026-09-30)
+
+`WebViewIntegrationTest` asserts that `app.js` calls a specific endpoint. Moving the page
+from `/api/scan` to `/api/scans` broke it, as intended.
+
+**How to apply:** when a test fails because behavior changed on purpose, update the
+assertion and say why in its message. Only do this when the spec changed too.

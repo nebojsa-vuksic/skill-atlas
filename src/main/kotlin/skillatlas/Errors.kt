@@ -67,3 +67,6 @@ class AmbiguousSkillException(selector: String, paths: List<String>) :
 
 class NotATerminalException :
     SkillAtlasException("browse needs an interactive terminal; use \"skill-atlas scan\" instead", ExitCode.USAGE)
+
+class UnexpectedFailureException(cause: Throwable) :
+    SkillAtlasException("unexpected failure: ${cause.message ?: cause.javaClass.name}", ExitCode.INTERNAL_ERROR, cause)
