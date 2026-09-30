@@ -6,6 +6,7 @@ the repository's name, description, and the commit that was scanned. See
 
 ```
 skill-atlas scan <github-project-url>
+skill-atlas serve [--port <port>]
 ```
 
 ## Requirements
@@ -24,6 +25,17 @@ build/install/skill-atlas/bin/skill-atlas scan https://github.com/anthropics/ski
 In a terminal the results are shown in a color-highlighted view built with
 [Mosaic](https://github.com/JakeWharton/mosaic), with a live status line while scanning.
 When stdout is piped or redirected, the tool prints plain text instead.
+
+### Web view
+
+```
+build/install/skill-atlas/bin/skill-atlas serve            # http://127.0.0.1:8421/
+build/install/skill-atlas/bin/skill-atlas serve --port 0   # any free port
+```
+
+This serves a local page on top of the same scanner. Open the printed URL, or link
+straight to a scan with `http://127.0.0.1:8421/?url=https://github.com/anthropics/skills`.
+The JSON API is `GET /api/scan?url=<repository-url>`.
 
 `./gradlew distZip` builds a distributable archive in `build/distributions/`.
 
