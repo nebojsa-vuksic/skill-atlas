@@ -62,14 +62,14 @@ with exit code `2` (see section 7).
 
 ### 4.1 Processing steps
 
-1. **Parse and validate the URL.** Normalize it to `owner/repo` plus an optional ref.
+1. **Parse and validate the URL.** Normalize it to `owner/repo`.
 2. **Fetch repository metadata** from the GitHub REST API (`GET /repos/{owner}/{repo}`):
    - `full_name` → repository name
    - `description` → repository description (may be `null`)
-   - `default_branch` → used when no ref is given
-3. **Get the repository contents** at the chosen ref with a shallow clone
-   (`git clone --depth 1 --branch <ref>`) into a temporary directory. When the ref is
-   a commit SHA, fetch that single commit instead.
+   - `default_branch` → the branch that is scanned
+3. **Get the repository contents** of the default branch with a shallow clone
+   (`git clone --depth 1 --branch <default-branch>`) into a temporary directory.
+   Scans always use the default branch; there is no option to choose another one.
 4. **Record the scanned commit** with `git rev-parse HEAD`.
 5. **Discover skills** (section 4.2).
 6. **Parse each skill file** (section 4.3).
@@ -145,7 +145,7 @@ Found 3 skills:
 
 Rules:
 - `Description:` shows `(none)` when the repository has no description.
-- `Commit:` shows the full SHA, followed by the ref name in parentheses.
+- `Commit:` shows the full SHA, followed by the default branch name in parentheses.
 - When no skills are found, the header is followed by `No skills found.`
 - Long descriptions are not truncated.
 
@@ -159,7 +159,7 @@ Every successful scan is logged, in addition to the report on stdout.
 - **Format:** JSON Lines, one object per scan, appended to the file:
 
 ```json
-{"scanned_at":"2026-09-30T10:28:00Z","repository":"anthropics/skills","description":"Public repository for Agent Skills","ref":"main","commit":"3f2a9c1e8b7d6a5f4e3d2c1b0a9f8e7d6c5b4a39","skill_count":3}
+{"scanned_at":"2026-09-30T10:28:00Z","repository":"anthropics/skills","description":"Public repository for Agent Skills","branch":"main","commit":"3f2a9c1e8b7d6a5f4e3d2c1b0a9f8e7d6c5b4a39","skill_count":3}
 ```
 
 - If the log cannot be written, print a warning to stderr. The scan itself still
@@ -173,7 +173,7 @@ Every successful scan is logged, in addition to the report on stdout.
 | `1` | Unexpected internal error | `error: unexpected failure: <details>` |
 | `2` | Invalid usage or URL | `error: not a GitHub repository URL: https://gitlab.com/a/b` |
 | `3` | Repository not found or not accessible | `error: repository owner/repo not found (is it private? set GITHUB_TOKEN)` |
-| `4` | Ref not found | `error: ref 'feature-x' not found in owner/repo` |
+| `4` | Default branch cannot be cloned, e.g. the repository is empty | `error: branch 'main' not found in owner/repo (is the repository empty?)` |
 | `5` | Network or GitHub API failure, including rate limiting | `error: GitHub API rate limit exceeded; set GITHUB_TOKEN to raise the limit` |
 
 Problems in individual skill files are never errors. They show up as warnings on that
