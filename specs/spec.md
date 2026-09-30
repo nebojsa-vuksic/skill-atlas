@@ -1169,8 +1169,9 @@ installs the browser's system libraries first with Playwright's `install-deps` c
 
 ## 12. Definition of done
 
-Every pull request follows `.github/pull_request_template.md`. A pull request that
-changes what users see includes a demo recorded as described in section 13.
+Every pull request follows `.github/pull_request_template.md`. CI's **Demos** job (section
+13) must be green too. A pull request that changes what users see updates the demo test
+cases (13.3) and, through the Update screenshots workflow, the baselines (13.5).
 
 
 Every change goes through a pull request, managed with the GitHub CLI (`gh`). A change is
@@ -1181,7 +1182,8 @@ done only when **all** of the following are true:
 2. **The branch is pushed and has a pull request,** opened with
    `gh pr create --base main --fill` or with an explicit title and body.
 3. **CI is green on the pull request** for its latest commit, on every platform in the
-   matrix. Watch it with `gh pr checks <pr> --watch`.
+   matrix, and in the **Demos** job with its screenshot comparison. Watch it with
+   `gh pr checks <pr> --watch`.
 4. **The pull request is merged** with `gh pr merge <pr> --merge --delete-branch`.
 
 If CI on the pull request is red:
@@ -1206,129 +1208,192 @@ sandbox is an isolated copy of the repository with its own branch and its own ag
    request that was green before `main` changed is not done.
 4. After the last merge, CI on `main` must be green.
 
-## 13. Demo recordings
+## 13. Demo recordings and screenshot tests
 
-A pull request that changes what users see includes a short demo video. The video comes
-from a **script**, not from a hand-made screen recording, so anyone can record it again,
-it looks the same every time, and no screen-recording permission is needed.
+Every feature has a **demo test**: a deterministic scenario that runs on CI. Each run
+records a narrated video of the scenario and takes screenshots at named **key moments**.
+Those screenshots are compared pixel by pixel with committed **baselines**. The videos
+show the project's current state, and the screenshot comparison catches visual
+regressions.
 
-### 13.1 Tools
+Demos are recorded **only on CI**. There is no local recording path, so a published video
+always comes from a clean, pinned environment.
 
-| What | Tool | Output |
-|------|------|--------|
-| Web view | Playwright video recording in headless Chromium, driven by a Node script | `.webm`, converted to `.mp4` and `.gif` with `ffmpeg` |
-| Voice-over | Kokoro (local neural TTS), or macOS `say` as a fallback | `.wav` lines mixed into the `.mp4` |
-| Terminal (`scan`, `browse`, shell) | VHS, driven by a `.tape` script | `.gif` and `.mp4` |
+### 13.1 Determinism
 
-`demo/package.json` pins Playwright to the same version as the Java tests. VHS
-(`brew install vhs`) brings `ffmpeg` and `ttyd` with it.
+A demo test must give the same pixels on every run.
 
-### 13.2 Scripts
+| What | How it is pinned |
+|------|------------------|
+| Data | The stub GitHub API and fixture repositories from section 11.2, never live GitHub. The fixtures (`DemoFixtures`) model real cases under neutral names (section 13.3): `acme/agent-skills` has ordinary skills, `acme/workbench` has copies in `.agents` and `.claude` plus product copies, and `acme/agent-framework` has test fixtures. Git dates are fixed, so commit SHAs never change. |
+| Web browser | Playwright for Java, at the Chromium version its pinned release ships. Viewport 1280×800, device scale factor 1, light color scheme, locale `en-US`, time zone `UTC`. Animations disabled, and the text caret hidden in screenshots. |
+| Fonts | Inter (text) and JetBrains Mono (code), both SIL OFL, are committed in `src/integrationTest/resources/fonts/`. Web tests inject them with an `@font-face` style that overrides the page fonts (Playwright's `bypassCSP` allows this in tests only). Terminal tapes use `Set FontFamily "JetBrains Mono"`, installed from the same files. |
+| Terminal | VHS, with `ttyd` and `ffmpeg`, at pinned versions. 1400×820, font size 16, `Set Framerate 20`, and a fixed theme. Key moments wait for their text with `Wait+Screen /…/` before `Screenshot`, never on a fixed sleep alone. |
+| Operating system | Ubuntu, the CI runner. Font rendering differs between operating systems, so baselines are produced and compared on Linux only. |
 
-Everything lives in `demo/`:
+Nothing time-dependent appears in a key moment. The scan-counter status line, spinners,
+and scan-log timestamps are recorded in the video but never screenshotted.
 
-- `demo/record.sh <name>` builds the distribution (`./gradlew installDist`). It starts
-  `skill-atlas serve` on a free port, runs the recording scripts for `<name>`, and stops
-  the server again, including when a step fails. The results go to `build/demo/<name>/`.
-- `demo/<name>/web.mjs` is a Playwright script: it opens the web view, types, clicks, and
-  pauses on each result long enough to read it (about 1.5 s).
-- `demo/<name>/terminal.tape` is a VHS script. It records at 1400×820 px, with the font at
-  16 px and a typing speed of 60 ms.
-- `demo/publish.sh <pr-number> <name>` publishes the files (section 13.3) and prints the
-  Markdown to paste into the pull request.
+### 13.2 Running
 
-The demo scripts run against real GitHub repositories, with `GITHUB_TOKEN=$(gh auth token)`,
-because a demo shows the real thing. They aren't tests and aren't part of `./gradlew build`.
+- **Gradle:** `./gradlew demoTest` runs every test tagged `demo` in the integration test
+  source set. `integrationTest` excludes that tag, so `./gradlew build` stays fast and
+  runs on any machine.
+- **CI:** `demoTest` runs only in its own CI job, **Demos**, on `ubuntu-latest`, for every
+  push and pull request. The job:
+  1. installs the pinned VHS, `ttyd`, `ffmpeg`, the fonts, and Kokoro (section 13.6), with
+     the model cached
+  2. runs `./gradlew demoTest`
+  3. turns each recording into a narrated `.mp4` and a captioned `.gif`
+     (`demo/lib/finish.mjs`)
+  4. uploads everything as the **`demos`** artifact: videos, GIFs, the screenshots taken,
+     and any diff images
+- **Output:** each demo writes to `build/demo/<demo>/`:
+  - `web.webm` or `terminal.webm`, the raw recording
+  - `*.narration.json`
+  - `screenshots/<moment>.png`
+  - after a failed comparison, `diff/<moment>.png` and `expected/<moment>.png` as well
+- **Failing:** a screenshot that differs from its baseline fails `demoTest`, and with it
+  the **Demos** job.
 
-A demo file must stay small:
-- **Web GIF:** at most 60 s, 960 px wide, 8 fps, and under 10 MB.
-- **Terminal GIF:** under 6 MB.
+### 13.3 Test cases
 
-The `.mp4` is kept next to the GIF for full quality, and it carries the voice-over.
+These are the demos and their key moments. Each key moment is one baseline:
+`src/integrationTest/baselines/<demo>/<moment>.png`. Every row says what the screenshot
+proves. The spec section and acceptance criterion it covers are in brackets.
 
-### 13.3 Publishing
+**Web view (Playwright): `web-basics`** on `acme/agent-skills`
 
-Demo files never go into `main`. They live on an **orphan branch** called `demos`, which
-has no shared history with `main`. `demo/publish.sh <target> <name>...` publishes one or
-more recorded demos:
+| Moment | Step | Proves |
+|--------|------|--------|
+| `01-empty` | Open the page | The form, and the empty state (5.4) |
+| `02-scanned` | Scan `github.com/acme/agent-skills` | The summary with name, description, commit and branch; the skill count; the list; the first skill selected (5.4, AC 11) |
+| `03-selected` | Click `pdf-toolkit` | Selection, the full description, paths, GitHub link, similar skills, and the rendered Markdown (5.4, AC 13) |
+| `04-raw` | Click Raw | The exact file text (5.4) |
+| `05-divider` | Drag the divider 160 px to the right | Resizing (5.4) |
+| `06-similar-opened` | Click the first similar skill | Similar skills navigate (5.6, AC 15) |
 
-- **`<target>`:** a PR number, which puts the demos under `demos/pr-<number>/`, or a label
-  such as `tour`, which puts them under `demos/<label>/`.
-- **One name** puts its files directly in that folder. **Several names** each get a
-  subfolder: `demos/<target>/<name>/`.
+**Web view: `web-search`** on `acme/workbench`
 
-The script:
+| Moment | Step | Proves |
+|--------|------|--------|
+| `01-merged` | Scan `github.com/acme/workbench` | Copies merged into one entry each, and the `◆` and `⧉` icons (4.4, AC 12) |
+| `02-shipped` | Select `generator` | `shipped in product` and the `also in` paths (4.4) |
+| `03-filtered` | Type `test` | Matches, highlighting, and the `n of total` count (5.5, AC 14) |
+| `04-snippet` | Scroll to the item whose match is past its shortened description | A snippet (5.5) |
+| `05-no-match` | Type `zzz` instead | The no-match message, with nothing selected (5.5) |
+| `06-restored` | Esc, type `generator`, then reload | Esc restores the selection; the URL restores the filter and selection (5.4, 5.5) |
 
-1. Checks out `demos` in a temporary worktree, or creates the orphan branch if it doesn't
-   exist.
-2. Copies each `build/demo/<name>/*.gif` and `*.mp4` into place.
-3. Commits and pushes `demos`.
-4. Prints Markdown for each demo:
+**Web view: `web-multi`** on all three fixture repositories
 
-```markdown
-![Web demo](https://github.com/<owner>/<repo>/blob/demos/demos/pr-<n>/web.gif?raw=true)
-[Full-quality video](https://github.com/<owner>/<repo>/blob/demos/demos/pr-<n>/web.mp4)
-```
+| Moment | Step | Proves |
+|--------|------|--------|
+| `01-three-repositories` | Enter the three URLs, then Scan | Chips, the summary table, and grouped lists (5.10, AC 24) |
+| `02-search-across` | Type `test` | A search across repositories, with group counts (5.10) |
+| `03-repo-qualifier` | Replace it with `repo:framework` | The `repo:` qualifier (5.10) |
+| `04-ignored` | Scroll to the ignored fixtures | Test fixtures are set aside, with repository prefixes (4.4, 5.10) |
+| `05-cross-similar` | Select `split-platform-code` | Similar skills from other repositories, labeled with their repository (5.10) |
+| `06-chip-removed` | Remove the `acme/agent-skills` chip | Its group is dropped; the others remain (5.10) |
 
-The repository is private, so these links work for people who have access to it. That's
-the same audience as the pull request.
+**Terminal (VHS): `cli`**
 
-### 13.4 Voice-over and captions
+| Moment | Step | Proves |
+|--------|------|--------|
+| `01-rich` | `scan github.com/acme/agent-skills --filter pdf` | The rich view, with highlights (5.1, 5.7) |
+| `02-plain` | The same without a filter, piped to `head` | Plain text, with no escape codes (5.2) |
+| `03-merged` | `scan github.com/acme/workbench` | Merged copies and product labels (4.4) |
+| `04-fixtures` | `scan github.com/acme/agent-framework` | Ignored test fixtures (4.4) |
+| `05-skill` | `scan … --skill pdf-toolkit` | The skill detail, with similar-skill bars (5.7, AC 17) |
+| `06-several` | Two repositories with `--filter 'repo:framework platform'` | Several repositories and the summary (5.10, AC 23) |
 
-Demos are narrated. An **original** narrator explains what's happening: a confident,
-upbeat voice with short, punchy lines. It must never imitate a real person's voice or
-catchphrases.
+**Terminal: `browse`** on `acme/agent-skills`
 
-- **Voice:** Kokoro, an open-source (Apache-2.0) neural text-to-speech model that runs
-  locally through `kokoro-onnx`. It sounds natural, works offline, needs no account, and
-  uploads nothing. The default voice is `af_heart` at speed 1.05. `DEMO_VOICE` and
-  `DEMO_SPEED` override it. `demo/setup-voice.sh` installs it once: a Python venv in
-  `demo/.venv` and about 340 MB of model files in `demo/.kokoro/`, both git-ignored.
-  `record.sh` runs the setup when it's missing. `DEMO_TTS=say` falls back to macOS `say`,
-  which is robotic but needs nothing installed.
-- **Web scripts** call `narrate(page, "…")` from `demo/lib/narrator.mjs`. It renders the
-  line with `say`, notes the time since the recording started, and then waits for the
-  line's length plus 0.4 s. The video therefore never runs ahead of the voice, and the
-  script has no fixed pauses to keep in sync.
-- **Terminal tapes** put a `# say: …` comment before the steps it describes.
-  `demo/lib/tape-narration.mjs` works out each line's start time from the tape:
-  - typing takes the length of the text times `TypingSpeed`
-  - `Sleep` adds its duration
-  - a key such as `Enter` or `Tab` adds `TypingSpeed`
-  - time between `Hide` and `Show` isn't recorded, so it doesn't count
+| Moment | Step | Proves |
+|--------|------|--------|
+| `01-open` | `browse github.com/acme/agent-skills` | The split layout, the list, and the selected skill (5.8, AC 18) |
+| `02-moved` | ↓ ↓ | Selection and the right pane follow (5.8) |
+| `03-filtered` | `/pdf`, then Enter | The live filter, the count, and highlights (5.8) |
+| `04-similar` | Tab | The similar-skills cursor (5.8) |
 
-  **Recording fails** if a line lasts longer than the time until the next line or the end
-  of the tape. The fix is a longer `Sleep`.
-- **Frame rate:** tapes use `Set Framerate 20`. At VHS's default of 50 fps, capture couldn't
-  keep up on a laptop. It dropped frames, and the video came out 25–40 % shorter than the
-  tape, so the voice drifted behind the screen. If a recording is still more than 3 %
-  shorter than the tape's timeline, `finish.mjs` stretches the video back to it.
-- **Mixing:** `record.sh` places each line at its start time with `ffmpeg` (`adelay`, then
-  `amix`) and muxes it into the `.mp4` as AAC.
-- **Captions:** the same lines are rendered as caption images by headless Chromium (white
-  text on a dark, rounded, 85 %-opaque bar at the bottom). They're laid over the video with
-  `ffmpeg`'s `overlay` filter, which needs no subtitle library. Captions are burned into
-  both the `.mp4` and the `.gif`, since a GIF has no sound.
-- `narration.json` in the output folder lists every line with its start time and length.
+**Terminal: `shell`**
 
-### 13.5 The feature tour
+| Moment | Step | Proves |
+|--------|------|--------|
+| `01-prompt` | `skill-atlas` | The prompt and its hint (5.9, AC 19) |
+| `02-palette` | `/` | Every command in the palette (5.9, AC 20) |
+| `03-narrowed` | `sc` | Ranking and highlighting (5.9) |
+| `04-scanned` | Tab, the URL, Enter | `/scan` output in the scrollback (5.9, AC 21) |
+| `05-skill-completion` | `/skill pdf`, Tab | Skill-name completion (5.9, AC 21) |
 
-`demo/tour-*/` demos every feature. It is published with `demo/publish.sh tour …`, and
-the README links it.
+A new feature that users can see adds a demo, or key moments, to this table. It also adds
+the matching baselines, in the same pull request.
 
-| Demo | Kind | Shows |
-|------|------|-------|
-| `tour-web-basics` | web | Scanning a repository; the split pane, with the full description, paths, GitHub link and rendered file; the Raw tab; the divider; similar skills |
-| `tour-web-search` | web | JetBrains/MPS duplicates and product skills; the filter; snippets; no match; Esc; the filter kept in the URL |
-| `tour-web-multi` | web | Three repositories as chips, with a summary table and grouped lists; search across them; `repo:`; similar skills across repositories; removing a chip |
-| `tour-cli` | terminal | `scan` in rich and plain form; merged copies, product labels and ignored fixtures (MPS, koog); `--filter`; `--skill`; several repositories |
-| `tour-browse` | terminal | `browse`: moving, the live filter, jumping to a similar skill, quitting |
-| `tour-shell` | terminal | The shell: the palette, Tab completion, `/scan`, `/filter`, `/skill` with name completion, `/log`, `/quit` |
+### 13.4 Comparing screenshots
 
-### 13.6 Skill
+- **Per pixel:** a pixel differs when any color channel differs by more than **16** (of
+  255). That tolerance absorbs anti-aliasing noise.
+- **Per moment:** a key moment fails when more than **0.1 %** of its pixels differ, or when
+  its size differs from the baseline.
+- **On failure** the test writes:
+  - the actual image to `screenshots/`
+  - the baseline to `expected/`
+  - a diff to `diff/`: the actual image faded to 30 %, with differing pixels in solid red
+- **The failure message** names the demo, the moment, the share of differing pixels, and
+  the three file paths.
+- **Missing baselines:** a moment without a baseline fails with
+  `no baseline for <demo>/<moment>; run the Update screenshots workflow`.
 
-How to record a demo is also captured as the `record-demo` skill
-(`.agents/skills/record-demo/SKILL.md`, with an identical copy in `.claude/skills/`). It
-covers a web view change, a terminal change, an interactive terminal view, recording
-again after a review, and common failures.
+### 13.5 Updating baselines
 
+Baselines change only when a change to the UI is intended. They are only ever produced on
+CI.
+
+- The **Update screenshots** workflow (`.github/workflows/update-screenshots.yml`, started
+  by hand for a branch) runs `./gradlew demoTest -PupdateScreenshots`. That writes every
+  key moment as its new baseline, instead of comparing.
+- The workflow commits the changed baselines to that branch, as `Update screenshot
+  baselines`, and then starts CI on the new commit. The baseline images therefore show up
+  in the pull request's diff, where reviewers can check them.
+- A pull request that changes baselines says why in its **Decisions** section.
+
+### 13.6 Narration
+
+Videos keep the voice-over and captions: Kokoro `af_heart`, an original voice (never an
+imitation of a real person), with the caption bar of section 13.1's fonts.
+
+- **Web demo tests** call `narrate("…")`. All of a demo's lines are rendered up front.
+  `narrate` notes the line's start time, then waits for its length plus 0.4 s. That keeps
+  the voice in sync with the screen, and it never affects screenshots, because key moments
+  are taken after narration has finished.
+- **Tapes** keep `# say:` comments (`demo/lib/tape-narration.mjs`). A `Wait` counts as zero
+  time, and the stubbed commands finish in well under a second.
+- **Without Kokoro,** narration lengths are estimated at 2.6 words per second, and the video
+  has captions only.
+
+### 13.7 Publishing: only the latest
+
+There is exactly one published set of demos, and it shows the current state of `main`.
+
+- **On `main`:** each run of the **Demos** job replaces `demos/latest/` on the orphan `demos`
+  branch with that run's videos and GIFs, in one commit. The commit message names the
+  `main` commit that the demos come from.
+- **Nothing else is kept.** Folders from older demos (`demos/pr-*`, `demos/tour/`) are
+  removed, so nothing stale remains.
+- **Pull requests** get their demos as the `demos` artifact of their CI run. The PR
+  template's **Demo** section links to that run.
+- **README:** its Demos section links to `demos/latest/`.
+
+### 13.8 Proving that it catches regressions
+
+When this is set up, and again whenever the comparison changes, the check is broken on
+purpose:
+1. A throwaway branch changes the page in a way users would notice, for example hiding the
+   similar-skills section.
+2. The **Demos** job must fail on that branch. The diff images must show the change in red.
+3. The branch is then deleted without being merged.
+
+### 13.9 Skill
+
+The `record-demo` skill (`.agents/skills/record-demo/SKILL.md`, with an identical copy in
+`.claude/skills/`) explains how to add a demo or key moments, how to read a failed
+comparison, and how to accept an intended change with the Update screenshots workflow.
