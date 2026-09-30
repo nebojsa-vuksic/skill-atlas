@@ -83,7 +83,13 @@ class SkillAtlasCliTest {
         return output
     }
 
-    private fun run(vararg args: String, gitExecutable: String = "git", logPath: Path = logFile): Run {
+    private fun run(
+        vararg args: String,
+        gitExecutable: String = "git",
+        logPath: Path = logFile,
+        interactive: Boolean = false,
+        shellView: (ShellSession) -> Unit = { error("the shell needs a terminal") },
+    ): Run {
         val stdout = ByteArrayOutputStream()
         val stderr = ByteArrayOutputStream()
         val err = PrintStream(stderr, true)
@@ -95,7 +101,7 @@ class SkillAtlasCliTest {
         )
         val out = PrintStream(stdout, true)
         val clock = Clock.fixed(Instant.parse("2026-09-30T10:28:00Z"), ZoneOffset.UTC)
-        val cli = SkillAtlasCli(scanner, ScanLog(logPath), PlainScanView(out, err), out, err, clock)
+        val cli = SkillAtlasCli(scanner, ScanLog(logPath), PlainScanView(out, err), out, err, clock, interactive, shellView)
         val exitCode = cli.run(args.toList())
         return Run(exitCode, stdout.toString(), stderr.toString())
     }
@@ -281,6 +287,29 @@ class SkillAtlasCliTest {
         val version = run("--version")
         assertEquals(ExitCode.OK, version.exitCode)
         assertTrue(version.stdout.startsWith("skill-atlas "), version.stdout)
+    }
+
+    @Test
+    fun `shell needs a terminal`() {
+        val run = run("shell")
+
+        assertEquals(ExitCode.USAGE, run.exitCode)
+        assertEquals("", run.stdout)
+        assertEquals("error: shell needs an interactive terminal; use \"skill-atlas scan\" instead\n", run.stderr)
+    }
+
+    @Test
+    fun `no arguments open the shell in a terminal`() {
+        var opened = 0
+        val run = run(interactive = true, shellView = { session ->
+            opened++
+            assertEquals(null, session.repository)
+        })
+
+        assertEquals(ExitCode.OK, run.exitCode, run.stderr)
+        assertEquals(1, opened)
+        assertEquals(ExitCode.OK, run("shell", interactive = true, shellView = { opened++ }).exitCode)
+        assertEquals(2, opened)
     }
 
     @Test

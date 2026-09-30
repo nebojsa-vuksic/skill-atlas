@@ -1,7 +1,7 @@
 package skillatlas
 
-/** How a piece of `browse` text is drawn; the Mosaic layer maps each to colors (spec section 5.8). */
-enum class Look { NORMAL, DIM, BOLD, ACCENT, SELECTED, HIGHLIGHT, TITLE, REPOSITORY, COMMIT, BRANCH, SHIPPED, WARNING, COUNT, BAR }
+/** How a piece of `browse` or `shell` text is drawn; the Mosaic layer maps each to colors (spec sections 5.8 and 5.9). */
+enum class Look { NORMAL, DIM, BOLD, ACCENT, SELECTED, HIGHLIGHT, TITLE, REPOSITORY, COMMIT, BRANCH, SHIPPED, WARNING, COUNT, BAR, CURSOR, ERROR }
 
 data class Span(val text: String, val look: Look = Look.NORMAL)
 

@@ -89,7 +89,7 @@ internal fun Browser(state: BrowseState) {
 }
 
 @Composable
-private fun LookText(span: Span) {
+internal fun LookText(span: Span) {
     when (span.look) {
         Look.NORMAL -> Text(span.text)
         Look.DIM -> Text(span.text, textStyle = TextStyle.Dim)
@@ -105,5 +105,7 @@ private fun LookText(span: Span) {
         Look.WARNING -> Text(span.text, color = Color.Yellow)
         Look.COUNT -> Text(span.text, color = Color.Cyan, textStyle = TextStyle.Bold)
         Look.BAR -> Text(span.text, color = Color.Cyan)
+        Look.CURSOR -> Text(span.text, textStyle = TextStyle.Invert)
+        Look.ERROR -> Text(span.text, color = Color.Red)
     }
 }

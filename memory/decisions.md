@@ -114,3 +114,16 @@ permissions, and can't be repeated. `gh` can't upload attachments to PR bodies, 
 repository is private, so the files live on a branch and are linked with `?raw=true`.
 **How to apply:** look at key frames with `ffmpeg -ss` before publishing. The first
 multi-repo recording showed "0 of 63" for `repo:koog test`, a poor search to demo.
+
+## The shell is a slash-command REPL on the same renderers (2026-09-30)
+
+`skill-atlas` with no arguments in a terminal opens `shell` (spec 5.9). Commands print the
+existing rich reports into scrollback, and the palette ranks exact, then prefix, then
+substring matches. Pure classes hold the logic: `ShellCommands.kt` (registry, matching,
+completion), `ShellState.kt` (history and keys), `ShellSession.kt` (commands) and
+`ShellScreen.kt` (layout). `ShellView.kt` is the thin Mosaic layer.
+
+**Why:** the owner asked for "a rich, interactive CLI … similar to the Claude CLI". Without
+a terminal the old usage error stays, so scripts don't hang on a prompt.
+**How to apply:** a new command is a row in `ShellCommands.ALL` plus a branch in
+`ShellSession.execute`, with a unit test and a line in the spec's command table.

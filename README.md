@@ -5,6 +5,7 @@ the repository's name, description, and the commit that was scanned. See
 [`specs/spec.md`](specs/spec.md) for the full specification.
 
 ```
+skill-atlas                              # in a terminal: the interactive shell
 skill-atlas scan <github-project-url>
 skill-atlas serve [--port <port>]
 ```
@@ -52,6 +53,27 @@ skill-atlas browse <url>                       # full-screen list + details in t
 
 In `browse`: ↑/↓ select, `/` filter, Tab to jump into similar skills, PgUp/PgDn scroll,
 Esc clear the filter, `q` quit.
+
+### Interactive shell
+
+```
+skill-atlas            # or: skill-atlas shell
+```
+
+A prompt with slash commands, in the style of the Claude Code CLI. Type `/` for the command
+palette: it filters as you type, ↑/↓ select, Tab completes, Enter runs, Esc closes.
+
+```
+/scan https://github.com/anthropics/skills    # scan, and keep it as the current repository
+/filter pdf                                   # like scan --filter (or just type: pdf)
+/skill docx                                   # like scan --skill; Tab after "/skill " completes names
+/similar docx                                 # only the similar-skills table
+/browse                                       # the full-screen browse view; q comes back
+/repo  /log  /serve [port]  /serve stop  /help  /quit
+```
+
+↑/↓ on the prompt walk the history. Ctrl-C clears the input, cancels a running scan, or quits
+on an empty input; Ctrl-D quits too.
 
 ### Web view
 
