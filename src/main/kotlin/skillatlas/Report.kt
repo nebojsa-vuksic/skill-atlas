@@ -7,7 +7,7 @@ data class ScanResult(
     val skills: List<Skill>,
 )
 
-/** Renders the human-readable report (spec section 5.1). */
+/** Renders the plain text report (spec section 5.2). */
 object TextReport {
     fun render(result: ScanResult): String = buildString {
         val description = result.repository.description?.let(::sanitize)?.ifBlank { null } ?: "(none)"
@@ -27,13 +27,30 @@ object TextReport {
             append("  ").append(sanitize(skill.name))
             if (skill.warnings.isNotEmpty()) append("  [warning: ${skill.warnings.joinToString(", ")}]")
             appendLine()
-            for (line in sanitize(skill.description).ifEmpty { "(no description)" }.lines()) {
-                if (line.isEmpty()) appendLine() else appendLine("    $line")
-            }
+            appendLine("    ${shortenDescription(skill.description).ifEmpty { "(no description)" }}")
             appendLine("    ${sanitize(skill.path)}")
         }
     }
-
-    /** Drops control characters so text from a scanned repository cannot inject terminal escape sequences. */
-    private fun sanitize(text: String) = text.filter { it == '\n' || it == '\t' || !it.isISOControl() }
 }
+
+const val MAX_DESCRIPTION_LENGTH = 100
+
+private val WHITESPACE = Regex("\\s+")
+
+/**
+ * Collapses [description] onto one line and, if it is longer than [maxLength], cuts it at
+ * the last word boundary and appends `…` (spec section 5.3).
+ */
+fun shortenDescription(description: String, maxLength: Int = MAX_DESCRIPTION_LENGTH): String {
+    val text = sanitize(description).replace(WHITESPACE, " ").trim()
+    if (text.length <= maxLength) return text
+
+    var cut = text.substring(0, maxLength)
+    val lastSpace = cut.lastIndexOf(' ')
+    if (text[maxLength] != ' ' && lastSpace > 0) cut = cut.substring(0, lastSpace)
+    if (cut.last().isHighSurrogate()) cut = cut.dropLast(1)
+    return cut.trimEnd(' ', ',', ';', ':', '.', '-', '–', '—') + "…"
+}
+
+/** Drops control characters so text from a scanned repository cannot inject terminal escape sequences. */
+fun sanitize(text: String) = text.filter { it == '\n' || it == '\t' || !it.isISOControl() }

@@ -4,14 +4,21 @@ clikt = "5.1.0"
 kotlinx-serialization = "1.11.0"
 snakeyaml-engine = "2.10"
 junit = "5.13.4"
+mosaic = "0.18.0"
+kotlinx-coroutines = "1.10.2"
 
 [libraries]
 clikt = { module = "com.github.ajalt.clikt:clikt-core", version.ref = "clikt" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 snakeyaml-engine = { module = "org.snakeyaml:snakeyaml-engine", version.ref = "snakeyaml-engine" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+mosaic-runtime = { module = "com.jakewharton.mosaic:mosaic-runtime", version.ref = "mosaic" }
+mosaic-tty = { module = "com.jakewharton.mosaic:mosaic-tty", version.ref = "mosaic" }
+mosaic-testing = { module = "com.jakewharton.mosaic:mosaic-testing", version.ref = "mosaic" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

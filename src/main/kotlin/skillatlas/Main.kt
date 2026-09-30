@@ -10,6 +10,9 @@ import com.github.ajalt.clikt.core.parse
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.options.versionOption
+import com.jakewharton.mosaic.tty.Tty
+import java.io.FileDescriptor
+import java.io.FileOutputStream
 import java.io.PrintStream
 import java.time.Clock
 import kotlin.system.exitProcess
@@ -17,20 +20,28 @@ import kotlin.system.exitProcess
 val VERSION: String = SkillAtlasCli::class.java.`package`?.implementationVersion ?: "dev"
 
 fun main(args: Array<String>) {
+    // Descriptions may contain any Unicode, and the report uses "…", "●" and "⚠".
+    System.setOut(PrintStream(FileOutputStream(FileDescriptor.out), true, Charsets.UTF_8))
+
     val token = System.getenv("GITHUB_TOKEN")?.takeIf { it.isNotBlank() }
-    val scanner = Scanner(
-        github = GitHubClient(token = token),
-        git = Git(token = token),
-        progress = System.err::println,
-    )
-    val cli = SkillAtlasCli(scanner, ScanLog(ScanLog.defaultLocation()))
+    val scanner = Scanner(github = GitHubClient(token = token), git = Git(token = token))
+    val view = if (isStdoutTerminal()) RichScanView() else PlainScanView(System.out, System.err)
+    val cli = SkillAtlasCli(scanner, ScanLog(ScanLog.defaultLocation()), view)
     exitProcess(cli.run(args.toList()))
+}
+
+/** True when stdout is an interactive terminal rather than a pipe or file (spec section 5). */
+private fun isStdoutTerminal(): Boolean = try {
+    Tty.tryBind()?.use { it.isStdoutTty() } ?: false
+} catch (_: Exception) {
+    false
 }
 
 /** Parses arguments, runs the command, and turns every outcome into an exit code (spec section 7). */
 class SkillAtlasCli(
     private val scanner: Scanner,
     private val scanLog: ScanLog,
+    private val view: ScanView,
     private val out: PrintStream = System.out,
     private val err: PrintStream = System.err,
     private val clock: Clock = Clock.systemUTC(),
@@ -78,7 +89,7 @@ class SkillAtlasCli(
 
         override fun run() {
             val result = try {
-                scanner.scan(url)
+                view.show { progress -> scanner.scan(url, progress) }
             } catch (e: SkillAtlasException) {
                 err.println("error: ${e.message}")
                 throw ProgramResult(e.exitCode)
@@ -86,9 +97,6 @@ class SkillAtlasCli(
                 err.println("error: unexpected failure: ${e.message ?: e.javaClass.name}")
                 throw ProgramResult(ExitCode.INTERNAL_ERROR)
             }
-
-            out.print(TextReport.render(result))
-            out.flush()
 
             try {
                 scanLog.append(ScanLogEntry.of(result, clock.instant()))

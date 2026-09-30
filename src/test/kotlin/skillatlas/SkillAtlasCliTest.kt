@@ -92,10 +92,11 @@ class SkillAtlasCliTest {
             git = Git(executable = gitExecutable),
             cloneUrl = { origin.toUri().toString() },
             tempRoot = tempRoot,
-            progress = err::println,
         )
+        val out = PrintStream(stdout, true)
         val clock = Clock.fixed(Instant.parse("2026-09-30T10:28:00Z"), ZoneOffset.UTC)
-        val exitCode = SkillAtlasCli(scanner, ScanLog(logPath), PrintStream(stdout, true), err, clock).run(args.toList())
+        val cli = SkillAtlasCli(scanner, ScanLog(logPath), PlainScanView(out, err), out, err, clock)
+        val exitCode = cli.run(args.toList())
         return Run(exitCode, stdout.toString(), stderr.toString())
     }
 

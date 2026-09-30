@@ -21,6 +21,10 @@ skill-atlas scan <github-project-url>
 build/install/skill-atlas/bin/skill-atlas scan https://github.com/anthropics/skills
 ```
 
+In a terminal the results are shown in a color-highlighted view built with
+[Mosaic](https://github.com/JakeWharton/mosaic), with a live status line while scanning.
+When stdout is piped or redirected, the tool prints plain text instead.
+
 `./gradlew distZip` builds a distributable archive in `build/distributions/`.
 
 Every successful scan is appended as one JSON line to

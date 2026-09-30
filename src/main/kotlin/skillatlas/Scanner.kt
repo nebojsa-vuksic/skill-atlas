@@ -12,9 +12,9 @@ class Scanner(
     private val git: Git,
     private val cloneUrl: (RepoCoordinates) -> String = { "https://github.com/${it.owner}/${it.name}.git" },
     private val tempRoot: Path? = null,
-    private val progress: (String) -> Unit = {},
 ) {
-    fun scan(url: String): ScanResult {
+    /** Scans the repository at [url], reporting each step through [progress]. */
+    fun scan(url: String, progress: (String) -> Unit = {}): ScanResult {
         val repository = GitHubUrl.parse(url)
         git.ensureAvailable()
 
@@ -22,7 +22,7 @@ class Scanner(
         val metadata = github.fetchRepository(repository)
         val branch = metadata.defaultBranch
 
-        return withTempDirectory { tempDir ->
+        return withTempDirectory(progress) { tempDir ->
             val checkout = tempDir.resolve("repo")
             progress("Cloning ${metadata.fullName} ($branch)...")
             git.shallowClone(cloneUrl(repository), branch, checkout, repository)
@@ -33,7 +33,7 @@ class Scanner(
     }
 
     @OptIn(ExperimentalPathApi::class)
-    private fun <T> withTempDirectory(block: (Path) -> T): T {
+    private fun <T> withTempDirectory(progress: (String) -> Unit, block: (Path) -> T): T {
         val dir = if (tempRoot != null) {
             Files.createTempDirectory(tempRoot, "skill-atlas-")
         } else {

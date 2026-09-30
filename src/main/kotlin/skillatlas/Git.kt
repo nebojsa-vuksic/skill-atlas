@@ -1,6 +1,7 @@
 package skillatlas
 
 import java.io.IOException
+import java.io.InputStream
 import java.nio.file.Path
 import java.util.Base64
 import java.util.concurrent.TimeUnit
@@ -73,10 +74,16 @@ class Git(
         var stdout = ""
         var stderr = ""
         val readers = listOf(
-            thread { stdout = process.inputStream.bufferedReader().readText() },
-            thread { stderr = process.errorStream.bufferedReader().readText() },
+            thread { stdout = readFully(process.inputStream) },
+            thread { stderr = readFully(process.errorStream) },
         )
-        if (!process.waitFor(TIMEOUT_MINUTES, TimeUnit.MINUTES)) {
+        val finished = try {
+            process.waitFor(TIMEOUT_MINUTES, TimeUnit.MINUTES)
+        } catch (e: InterruptedException) {
+            process.destroyForcibly()
+            throw e
+        }
+        if (!finished) {
             process.destroyForcibly()
             throw NetworkException("git timed out after $TIMEOUT_MINUTES minutes")
         }
@@ -95,6 +102,17 @@ class Git(
             "could not read Username",
             "Authentication failed",
         )
+
+        /** Reads [stream] to the end. Returns what was read so far if the process is killed mid-read. */
+        fun readFully(stream: InputStream): String {
+            val text = StringBuilder()
+            try {
+                stream.bufferedReader().use { reader -> reader.forEachLine { text.appendLine(it) } }
+            } catch (_: IOException) {
+                // The stream was closed because the process was destroyed.
+            }
+            return text.toString()
+        }
 
         fun lastLine(text: String) = text.lines().lastOrNull { it.isNotBlank() }?.trim() ?: "no output"
     }

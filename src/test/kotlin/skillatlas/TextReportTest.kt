@@ -2,6 +2,7 @@ package skillatlas
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class TextReportTest {
     private val sha = "3f2a9c1e8b7d6a5f4e3d2c1b0a9f8e7d6c5b4a39"
@@ -65,13 +66,26 @@ class TextReportTest {
     }
 
     @Test
-    fun `indents multi-line descriptions and uses the singular for one skill`() {
-        val result = ScanResult(repository, "main", sha, listOf(Skill("a", "Line one.\nLine two.", "a")))
+    fun `collapses multi-line descriptions and uses the singular for one skill`() {
+        val result = ScanResult(repository, "main", sha, listOf(Skill("a", "Line one.\n\n  Line two.", "a")))
 
         val report = TextReport.render(result)
 
-        assertEquals(true, report.contains("Found 1 skill:\n"))
-        assertEquals(true, report.contains("    Line one.\n    Line two.\n    a\n"))
+        assertTrue(report.contains("Found 1 skill:\n"), report)
+        assertTrue(report.contains("    Line one. Line two.\n    a\n"), report)
+    }
+
+    @Test
+    fun `shortens long descriptions at a word boundary`() {
+        val long = "Stop and check this skill before finishing any reply to a question about how to use Claude or a Claude product."
+        val result = ScanResult(repository, "main", sha, listOf(Skill("a", long, "a")))
+
+        val report = TextReport.render(result)
+
+        assertTrue(
+            report.contains("    Stop and check this skill before finishing any reply to a question about how to use Claude or a…\n"),
+            report,
+        )
     }
 
     @Test
@@ -80,8 +94,7 @@ class TextReportTest {
 
         val report = TextReport.render(result)
 
-        assertEquals(false, report.contains('\u001B'))
-        assertEquals(false, report.contains('\u0007'))
-        assertEquals(true, report.contains("  evil[31m\n    red\n"))
+        assertTrue('\u001B' !in report && '\u0007' !in report, report)
+        assertTrue(report.contains("  evil[31m\n    red\n"), report)
     }
 }

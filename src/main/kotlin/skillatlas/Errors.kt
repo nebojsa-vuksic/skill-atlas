@@ -8,6 +8,7 @@ object ExitCode {
     const val REPOSITORY_NOT_FOUND = 3
     const val BRANCH_NOT_FOUND = 4
     const val NETWORK = 5
+    const val INTERRUPTED = 130
 }
 
 /** A failure that ends the scan. Only the CLI layer turns these into messages and exit codes. */
@@ -50,3 +51,6 @@ class NetworkException(message: String, cause: Throwable? = null) :
 
 class GitNotFoundException(cause: Throwable? = null) :
     SkillAtlasException("git executable not found on PATH; install git and try again", ExitCode.INTERNAL_ERROR, cause)
+
+class ScanInterruptedException :
+    SkillAtlasException("scan interrupted", ExitCode.INTERRUPTED)

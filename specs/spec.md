@@ -5,7 +5,8 @@
 Skill Atlas is a command-line tool that scans a GitHub repository and reports every
 agent skill defined in it. For each skill it lists the skill's **name** and
 **description**. Each scan also logs which repository was scanned: its **name**,
-**description**, and the **commit** that was read.
+**description**, and the **commit** that was read. In a terminal, the results are
+shown in a rich, color-highlighted view built with Mosaic (section 5.1).
 
 ```
 skill-atlas scan <github-project-url>
@@ -118,10 +119,68 @@ Each skill result contains:
 
 ## 5. Output
 
-The report goes to **stdout**. Progress messages, warnings, and errors go to
-**stderr**, so stdout can be piped or redirected cleanly.
+The report goes to **stdout**. Errors and warnings go to **stderr**.
 
-### 5.1 Text format (default)
+How the report looks depends on where stdout goes:
+
+- **stdout is a terminal:** the rich terminal view (section 5.1).
+- **stdout is a pipe or a file:** the plain text format (section 5.2). This keeps the
+  output free of escape codes so it can be piped or redirected cleanly.
+
+### 5.1 Rich terminal view
+
+The rich view is rendered with [Mosaic](https://github.com/JakeWharton/mosaic), a
+Compose-based terminal UI library for Kotlin.
+
+**While scanning,** one live status line shows a spinner and the current step, e.g.
+`⠹ Cloning anthropics/skills (main)…`. It replaces the progress messages that the plain
+format prints to stderr. The status line is removed when the scan ends.
+
+**When the scan finishes,** the report is printed once and stays in the terminal's
+scrollback:
+
+```
+ SKILL ATLAS
+
+ Repository   anthropics/skills
+ Description  Public repository for Agent Skills
+ Commit       3f2a9c1e8b7d6a5f4e3d2c1b0a9f8e7d6c5b4a39  main
+
+ 3 skills found
+
+ ● pdf-extract
+   Extract text and tables from PDF files. Use when the user asks to read or parse a PDF.
+   skills/pdf-extract
+
+ ● brand-guidelines
+   Apply company brand colors and typography to documents.
+   skills/brand-guidelines
+
+ ● csv-tools  ⚠ missing description
+   (no description)
+   skills/csv-tools
+```
+
+Each part of the report is highlighted:
+
+| Part | Style |
+|------|-------|
+| `SKILL ATLAS` title | bold, inverted |
+| Labels (`Repository`, `Description`, `Commit`) | dim |
+| Repository name | bold cyan |
+| Repository description | italic; `(none)` in dim when missing |
+| Commit hash | bold yellow |
+| Branch name | magenta |
+| Skill count line | bold green; `No skills found.` in yellow |
+| Skill name and its `●` bullet | bold cyan |
+| Skill description | default color; `(no description)` in dim |
+| Skill path | dim |
+| Warnings (`⚠ …`) | yellow |
+
+If the terminal does not support color, Mosaic falls back to plain text with the same
+layout.
+
+### 5.2 Plain text format
 
 ```
 Repository:  anthropics/skills
@@ -147,7 +206,20 @@ Rules:
 - `Description:` shows `(none)` when the repository has no description.
 - `Commit:` shows the full SHA, followed by the default branch name in parentheses.
 - When no skills are found, the header is followed by `No skills found.`
-- Long descriptions are not truncated.
+- Progress messages (`Fetching metadata for owner/repo...`, `Cloning owner/repo (main)...`)
+  go to stderr.
+
+### 5.3 Shortened skill descriptions
+
+Both formats show a shortened form of each skill description, so every skill takes
+three lines:
+
+- Line breaks and runs of whitespace are collapsed into single spaces.
+- A description longer than **100 characters** is cut at the last word boundary
+  before the limit, and `…` is appended.
+- In the rich view, the limit is also reduced to fit the terminal width.
+
+The scan log (section 6) does not store skill descriptions, so nothing is lost there.
 
 ## 6. Scan log
 
@@ -175,6 +247,7 @@ Every successful scan is logged, in addition to the report on stdout.
 | `3` | Repository not found or not accessible | `error: repository owner/repo not found (is it private? set GITHUB_TOKEN)` |
 | `4` | Default branch cannot be cloned, e.g. the repository is empty | `error: branch 'main' not found in owner/repo (is the repository empty?)` |
 | `5` | Network or GitHub API failure, including rate limiting | `error: GitHub API rate limit exceeded; set GITHUB_TOKEN to raise the limit` |
+| `130` | Interrupted with Ctrl-C | `error: scan interrupted` |
 
 Problems in individual skill files are never errors. They show up as warnings on that
 skill (section 4.3).
@@ -191,7 +264,14 @@ skill (section 4.3).
   `scanned_at`.
 - **Platforms:** macOS and Linux. Windows is desirable but not required for v1.
 
-## 9. Acceptance criteria
+## 9. Implementation
+
+- **Language:** Kotlin on the JVM (Java 21+), built with Gradle.
+- **Command-line parsing:** Clikt.
+- **Terminal UI:** Mosaic (`com.jakewharton.mosaic:mosaic-runtime`) with the Kotlin
+  Compose compiler plugin. The report is a set of `@Composable` functions.
+
+## 10. Acceptance criteria
 
 1. `skill-atlas scan https://github.com/<owner>/<repo>` on a public repo with skills
    prints the repository name, description, and full commit SHA, followed by every
@@ -203,3 +283,8 @@ skill (section 4.3).
 5. Each successful scan appends exactly one line to the scan log.
 6. Every error condition in section 7 exits with its listed code and message.
 7. The temporary clone directory is gone after both successful and failed runs.
+8. In a terminal, the scan shows a live status line, then the highlighted report from
+   section 5.1.
+9. When stdout is piped, e.g. `skill-atlas scan <url> | cat`, the output is the plain
+   format from section 5.2 with no escape codes.
+10. No skill description in either format is longer than 100 characters plus `…`.
