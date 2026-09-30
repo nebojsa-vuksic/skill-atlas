@@ -8,6 +8,7 @@ object ExitCode {
     const val REPOSITORY_NOT_FOUND = 3
     const val BRANCH_NOT_FOUND = 4
     const val NETWORK = 5
+    const val SKILL_NOT_FOUND = 6
     const val INTERRUPTED = 130
 }
 
@@ -54,3 +55,15 @@ class GitNotFoundException(cause: Throwable? = null) :
 
 class ScanInterruptedException :
     SkillAtlasException("scan interrupted", ExitCode.INTERRUPTED)
+
+class SkillNotFoundException(selector: String, repository: String) :
+    SkillAtlasException("no skill '$selector' in $repository", ExitCode.SKILL_NOT_FOUND)
+
+class AmbiguousSkillException(selector: String, paths: List<String>) :
+    SkillAtlasException(
+        "skill name '$selector' matches ${paths.size} skills: ${paths.joinToString(", ")}; pass a path instead",
+        ExitCode.USAGE,
+    )
+
+class NotATerminalException :
+    SkillAtlasException("browse needs an interactive terminal; use \"skill-atlas scan\" instead", ExitCode.USAGE)

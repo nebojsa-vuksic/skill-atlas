@@ -25,14 +25,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 
-/** A live status line while scanning, then the highlighted report, rendered with Mosaic (spec section 5.1). */
+/** A live status line while scanning, then the highlighted report, rendered with Mosaic (spec sections 5.1 and 5.7). */
 class RichScanView : ScanView {
-    override fun show(scan: (progress: (String) -> Unit) -> ScanResult): ScanResult {
-        var outcome: Result<ScanResult>? = null
+    override fun show(scan: (progress: (String) -> Unit) -> Presentation): Presentation {
+        var outcome: Result<Presentation>? = null
         try {
             runMosaicBlocking(onNonInteractive = NonInteractivePolicy.Ignore) {
                 var status by remember { mutableStateOf("Starting") }
-                var finished by remember { mutableStateOf<Result<ScanResult>?>(null) }
+                var finished by remember { mutableStateOf<Result<Presentation>?>(null) }
 
                 LaunchedEffect(Unit) {
                     // runInterruptible lets Ctrl-C (which cancels the composition) interrupt the blocking scan.
@@ -56,10 +56,10 @@ class RichScanView : ScanView {
     }
 }
 
-private val SPINNER = listOf("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+internal val SPINNER = listOf("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
 @Composable
-private fun StatusLine(status: String) {
+internal fun StatusLine(status: String) {
     var frame by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -77,7 +77,11 @@ private const val LABEL_WIDTH = 13
 
 /** The finished report. [columns] is the terminal width, used to fit skill descriptions. */
 @Composable
-internal fun Report(result: ScanResult, columns: Int) {
+internal fun Report(result: ScanResult, columns: Int) = Report(Presentation.SkillList(result), columns)
+
+@Composable
+internal fun Report(presentation: Presentation, columns: Int) {
+    val result = presentation.result
     val repository = result.repository
     // One column of padding plus a two-column skill indent, and one spare so lines never wrap.
     // Terminals that report no size get the full limit.
@@ -106,24 +110,105 @@ internal fun Report(result: ScanResult, columns: Int) {
         }
         Text("")
 
-        val skills = result.skills
-        if (skills.isEmpty()) {
-            Text("No skills found.", color = Color.Yellow)
-        } else {
-            val count = "${skills.size} ${if (skills.size == 1) "skill" else "skills"} found"
-            Text(count, color = Color.Green, textStyle = TextStyle.Bold)
-            for (skill in skills) {
-                Text("")
-                SkillEntry(skill, descriptionLength)
-            }
+        when (presentation) {
+            is Presentation.SkillList -> SkillListReport(presentation, descriptionLength)
+            is Presentation.SkillDetail -> SkillDetailReport(presentation)
         }
-        if (result.ignored.isNotEmpty()) {
-            Text("")
-            Text(ignoredHeading(result.ignored.size), textStyle = TextStyle.Dim)
-            for (ignored in result.ignored) {
-                Text("  ${sanitize(ignored.path)}", textStyle = TextStyle.Dim)
-            }
+    }
+}
+
+@Composable
+private fun SkillListReport(list: Presentation.SkillList, descriptionLength: Int) {
+    val result = list.result
+    val words = list.words
+    val total = result.skills.size
+    val skills = list.skills
+    val query = sanitize(list.query.orEmpty())
+    when {
+        total == 0 -> Text("No skills found.", color = Color.Yellow)
+        words == null -> Text("$total ${if (total == 1) "skill" else "skills"} found", color = Color.Green, textStyle = TextStyle.Bold)
+        skills.isEmpty() -> Text("No skills match \"$query\".", color = Color.Yellow)
+        else -> Text("${skills.size} of $total skills match \"$query\"", color = Color.Green, textStyle = TextStyle.Bold)
+    }
+    for (skill in skills) {
+        Text("")
+        SkillEntry(skill, descriptionLength, words.orEmpty())
+    }
+    if (result.ignored.isNotEmpty()) {
+        Text("")
+        Text(ignoredHeading(result.ignored.size), textStyle = TextStyle.Dim)
+        for (ignored in result.ignored) {
+            Text("  ${sanitize(ignored.path)}", textStyle = TextStyle.Dim)
         }
+    }
+}
+
+@Composable
+private fun SkillDetailReport(detail: Presentation.SkillDetail) {
+    val skill = detail.skill
+    Field("Skill") {
+        Text(sanitize(skill.name), color = Color.Cyan, textStyle = TextStyle.Bold)
+        Tags(skill)
+    }
+    Field("Path") { Text(sanitize(skill.path), textStyle = TextStyle.Dim) }
+    skill.alsoAt.forEachIndexed { i, copy ->
+        Field(if (i == 0) "Also in" else "") { Text(sanitize(copy), textStyle = TextStyle.Dim) }
+    }
+    Field("GitHub") { Text(detail.githubUrl) }
+    Text("")
+
+    Text("Description", textStyle = TextStyle.Dim)
+    val description = sanitize(skill.description).trim()
+    if (description.isEmpty()) {
+        Text("  (no description)", textStyle = TextStyle.Dim)
+    } else {
+        for (line in description.lines()) Text(if (line.isEmpty()) "" else "  $line")
+    }
+    Text("")
+
+    Text("Similar skills", textStyle = TextStyle.Dim)
+    if (detail.similar.isEmpty()) Text("  No similar skills found.", textStyle = TextStyle.Dim)
+    val width = detail.similar.maxOfOrNull { it.name.length } ?: 0
+    for (similar in detail.similar) {
+        Row {
+            Text("  ${sanitize(similar.name).padEnd(width)}  ", textStyle = TextStyle.Bold)
+            Text(similarityBar(similar.score), color = Color.Cyan)
+            Text(" ${"%3d %%".format(similar.score)}  ", textStyle = TextStyle.Bold)
+            Text(sanitize(similar.path), textStyle = TextStyle.Dim)
+        }
+    }
+    Text("")
+
+    Text("SKILL.md", textStyle = TextStyle.Dim)
+    val content = detail.content?.let(::sanitize)?.trimEnd('\n')
+    if (content == null) {
+        Text("  (content not available)", textStyle = TextStyle.Dim)
+    } else {
+        for (line in content.lines()) Text(if (line.isEmpty()) "" else "  $line")
+    }
+}
+
+/** [text] with the parts that match [words] shown black on yellow (spec section 5.7). */
+@Composable
+internal fun Highlighted(text: String, words: List<String>, color: Color = Color.Unspecified, textStyle: TextStyle = TextStyle.Unspecified) {
+    Row {
+        var at = 0
+        for (range in SkillFilter.matchRanges(text, words)) {
+            if (range.first > at) Text(text.substring(at, range.first), color = color, textStyle = textStyle)
+            Text(text.substring(range.first, range.last + 1), color = Color.Black, background = Color.Yellow, textStyle = textStyle)
+            at = range.last + 1
+        }
+        if (at < text.length || text.isEmpty()) Text(text.substring(at), color = color, textStyle = textStyle)
+    }
+}
+
+@Composable
+private fun Tags(skill: Skill) {
+    if (skill.shipped) {
+        Text("  ◆ $SHIPPED_LABEL", color = Color.Magenta)
+    }
+    if (skill.warnings.isNotEmpty()) {
+        Text("  ⚠ ${skill.warnings.joinToString(", ")}", color = Color.Yellow)
     }
 }
 
@@ -136,21 +221,24 @@ private fun Field(label: String, value: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SkillEntry(skill: Skill, descriptionLength: Int) {
+private fun SkillEntry(skill: Skill, descriptionLength: Int, words: List<String>) {
     Row {
-        Text("● ${sanitize(skill.name)}", color = Color.Cyan, textStyle = TextStyle.Bold)
-        if (skill.shipped) {
-            Text("  ◆ $SHIPPED_LABEL", color = Color.Magenta)
-        }
-        if (skill.warnings.isNotEmpty()) {
-            Text("  ⚠ ${skill.warnings.joinToString(", ")}", color = Color.Yellow)
-        }
+        Text("● ", color = Color.Cyan, textStyle = TextStyle.Bold)
+        Highlighted(sanitize(skill.name), words, Color.Cyan, TextStyle.Bold)
+        Tags(skill)
     }
-    val description = shortenDescription(skill.description, descriptionLength)
+    val description = if (words.isEmpty()) {
+        shortenDescription(skill.description, descriptionLength)
+    } else {
+        SkillFilter.descriptionLine(skill, words, descriptionLength).orEmpty()
+    }
     if (description.isEmpty()) {
         Text("  (no description)", textStyle = TextStyle.Dim)
     } else {
-        Text("  $description")
+        Row {
+            Text("  ")
+            Highlighted(description, words)
+        }
     }
     Text("  ${sanitize(skill.path)}", textStyle = TextStyle.Dim)
     for (copy in skill.alsoAt) {

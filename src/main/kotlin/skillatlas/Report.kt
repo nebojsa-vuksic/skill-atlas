@@ -11,28 +11,44 @@ data class ScanResult(
     val contents: Map<String, String> = emptyMap(),
 )
 
-/** Renders the plain text report (spec section 5.2). */
+/** Renders the plain text report (spec sections 5.2 and 5.7). */
 object TextReport {
-    fun render(result: ScanResult): String = buildString {
+    fun render(result: ScanResult): String = render(Presentation.SkillList(result))
+
+    fun render(presentation: Presentation): String = buildString {
+        header(presentation.result)
+        when (presentation) {
+            is Presentation.SkillList -> skillList(presentation)
+            is Presentation.SkillDetail -> skillDetail(presentation)
+        }
+    }
+
+    private fun StringBuilder.header(result: ScanResult) {
         val description = result.repository.description?.let(::sanitize)?.ifBlank { null } ?: "(none)"
         appendLine("Repository:  ${result.repository.fullName}")
         appendLine("Description: $description")
         appendLine("Commit:      ${result.commit} (${sanitize(result.branch)})")
         appendLine()
+    }
 
-        val skills = result.skills
-        if (skills.isEmpty()) {
-            appendLine("No skills found.")
-        } else {
-            appendLine("Found ${skills.size} ${if (skills.size == 1) "skill" else "skills"}:")
+    private fun StringBuilder.skillList(list: Presentation.SkillList) {
+        val result = list.result
+        val words = list.words
+        val total = result.skills.size
+        val skills = list.skills
+        when {
+            total == 0 -> appendLine("No skills found.")
+            words == null -> appendLine("Found $total ${skillsWord(total)}:")
+            skills.isEmpty() -> appendLine("Found $total ${skillsWord(total)}, none match \"${sanitize(list.query.orEmpty())}\".")
+            else -> appendLine("Found $total ${skillsWord(total)}, ${skills.size} match \"${sanitize(list.query.orEmpty())}\":")
         }
         for (skill in skills) {
             appendLine()
             append("  ").append(sanitize(skill.name))
-            if (skill.shipped) append("  [$SHIPPED_LABEL]")
-            if (skill.warnings.isNotEmpty()) append("  [warning: ${skill.warnings.joinToString(", ")}]")
+            tags(skill)
             appendLine()
-            appendLine("    ${shortenDescription(skill.description).ifEmpty { "(no description)" }}")
+            val line = if (words == null) shortenDescription(skill.description) else SkillFilter.descriptionLine(skill, words)
+            appendLine("    ${line?.ifEmpty { null } ?: "(no description)"}")
             appendLine("    ${sanitize(skill.path)}")
             for (copy in skill.alsoAt) appendLine("    also in ${sanitize(copy)}")
         }
@@ -43,6 +59,43 @@ object TextReport {
             for (ignored in result.ignored) appendLine("  ${sanitize(ignored.path)}")
         }
     }
+
+    private fun StringBuilder.skillDetail(detail: Presentation.SkillDetail) {
+        val skill = detail.skill
+        append("Skill:       ").append(sanitize(skill.name))
+        tags(skill)
+        appendLine()
+        appendLine("Path:        ${sanitize(skill.path)}")
+        skill.alsoAt.forEachIndexed { i, copy -> appendLine("${if (i == 0) "Also in:     " else "             "}${sanitize(copy)}") }
+        appendLine("GitHub:      ${detail.githubUrl}")
+        appendLine()
+
+        appendLine("Description:")
+        indented(sanitize(skill.description).trim().ifEmpty { "(no description)" })
+        appendLine()
+
+        appendLine("Similar skills:")
+        if (detail.similar.isEmpty()) appendLine("  No similar skills found.")
+        val width = detail.similar.maxOfOrNull { it.name.length } ?: 0
+        for (similar in detail.similar) {
+            appendLine("  ${sanitize(similar.name).padEnd(width)}  ${similarityBar(similar.score)} ${"%3d %%".format(similar.score)}  ${sanitize(similar.path)}")
+        }
+        appendLine()
+
+        appendLine("SKILL.md:")
+        indented(detail.content?.let(::sanitize)?.trimEnd('\n') ?: "(content not available)")
+    }
+
+    private fun StringBuilder.tags(skill: Skill) {
+        if (skill.shipped) append("  [$SHIPPED_LABEL]")
+        if (skill.warnings.isNotEmpty()) append("  [warning: ${skill.warnings.joinToString(", ")}]")
+    }
+
+    private fun StringBuilder.indented(text: String) {
+        for (line in text.lines()) appendLine(if (line.isEmpty()) "" else "  $line")
+    }
+
+    private fun skillsWord(count: Int) = if (count == 1) "skill" else "skills"
 }
 
 const val MAX_DESCRIPTION_LENGTH = 100
