@@ -83,6 +83,38 @@ well-tested library beats a hand-written renderer in the browser.
 **How to apply:** everything else goes into the page with `textContent` only. Browser tests
 check that `<script>`, `<img onerror>`, and `javascript:` in a skill never run.
 
+## Several repositories: one pass per repository, then one similarity pass (2026-09-30)
+
+`scan` and `/api/scans` scan each repository on its own, up to 4 at a time, in URL order,
+and never scan the same `owner/repo` twice. Similarity is then computed once over all of
+them, with ids like `owner/repo:path`. `browse` and the shell stay single-repository.
+
+**Why:** paths repeat across repositories, so ids must include the repository. Similar
+skills in *other* repositories are the most useful part of scanning several at once.
+**How to apply:** use `crossRepositorySimilarity`, not `SkillSimilarity.compute`, whenever
+more than one repository is involved. Single-repository output must stay byte-identical,
+because the old tests check it exactly.
+
+## The web view caches scans for 10 minutes (2026-09-30)
+
+`/api/scans` reuses a repository's result for 10 minutes (`ScanCache`), so adding or
+removing a chip clones only new repositories. Cached results aren't logged again.
+
+**Why:** without the cache, each chip change cloned everything again. Adding a 4th real
+repository took 2.3 s with the cache.
+
+## Demos are scripted and live on an orphan `demos` branch (2026-09-30)
+
+Playwright video records the web view, and VHS records the terminal. `demo/record.sh` and
+`demo/publish.sh` do the work, and the `record-demo` skill describes the process (spec
+section 13).
+
+**Why:** the owner suggested QuickTime, but it's manual, captures the whole screen, needs
+permissions, and can't be repeated. `gh` can't upload attachments to PR bodies, and the
+repository is private, so the files live on a branch and are linked with `?raw=true`.
+**How to apply:** look at key frames with `ffmpeg -ss` before publishing. The first
+multi-repo recording showed "0 of 63" for `repo:koog test`, a poor search to demo.
+
 ## The shell is a slash-command REPL on the same renderers (2026-09-30)
 
 `skill-atlas` with no arguments in a terminal opens `shell` (spec 5.9). Commands print the

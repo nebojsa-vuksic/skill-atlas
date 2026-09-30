@@ -81,21 +81,62 @@ internal fun Report(result: ScanResult, columns: Int) = Report(Presentation.Skil
 
 @Composable
 internal fun Report(presentation: Presentation, columns: Int) {
-    val result = presentation.result
     // One column of padding plus a two-column skill indent, and one spare so lines never wrap.
     // Terminals that report no size get the full limit.
     val descriptionLength =
         if (columns <= 0) MAX_DESCRIPTION_LENGTH else (columns - 5).coerceIn(20, MAX_DESCRIPTION_LENGTH)
 
     Column(modifier = Modifier.padding(horizontal = 1)) {
-        RepositoryHeader(result)
+        Text(" SKILL ATLAS ", textStyle = TextStyle.Bold + TextStyle.Invert)
         Text("")
 
         when (presentation) {
-            is Presentation.SkillList -> SkillListReport(presentation, descriptionLength)
-            is Presentation.SkillDetail -> SkillDetailReport(presentation)
+            is Presentation.SkillList -> {
+                RepositoryFields(presentation.result)
+                SkillListReport(presentation, descriptionLength)
+            }
+            is Presentation.SkillDetail -> {
+                RepositoryFields(presentation.result)
+                SkillDetailReport(presentation)
+            }
+            is Presentation.MultiList -> {
+                presentation.lists.forEachIndexed { i, list ->
+                    if (i > 0) {
+                        Text("")
+                        Text(REPOSITORY_SEPARATOR.take(if (columns > 2) minOf(80, columns - 2) else 80), textStyle = TextStyle.Dim)
+                        Text("")
+                    }
+                    RepositoryFields(list.result)
+                    SkillListReport(list, descriptionLength)
+                }
+                if (presentation.lists.isNotEmpty()) Text("")
+                Text(presentation.summary, color = Color.Green, textStyle = TextStyle.Bold)
+            }
         }
     }
+}
+
+/** The repository, description and commit fields, without the title, for reports that show several repositories. */
+@Composable
+private fun RepositoryFields(result: ScanResult) {
+    val repository = result.repository
+    Field("Repository") {
+        Text(sanitize(repository.fullName), color = Color.Cyan, textStyle = TextStyle.Bold)
+    }
+    Field("Description") {
+        val description = repository.description?.let(::shortenDescription)?.ifBlank { null }
+        if (description == null) {
+            Text("(none)", textStyle = TextStyle.Dim)
+        } else {
+            Text(description, textStyle = TextStyle.Italic)
+        }
+    }
+    Field("Commit") {
+        Text(result.commit, color = Color.Yellow, textStyle = TextStyle.Bold)
+        Text("  ")
+        Text(sanitize(result.branch), color = Color.Magenta)
+    }
+    Text("")
 }
 
 /** The title and the repository, description and commit fields that start every report. */

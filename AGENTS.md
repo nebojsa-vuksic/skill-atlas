@@ -12,6 +12,9 @@ Instructions for AI agents working in this repository. Humans are welcome to rea
   trap and its fix, or a change in how we work. Commit it in the same PR as the change.
 - **Read the spec first:** `specs/spec.md` is the source of truth for behavior. Change the
   spec before, or together with, the code.
+- **Every PR follows `.github/pull_request_template.md`.** When users can see the change,
+  record a scripted demo with the `record-demo` skill (`.agents/skills/record-demo/SKILL.md`)
+  and embed it in the PR (spec section 13).
 
 ## Project
 

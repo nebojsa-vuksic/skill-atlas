@@ -9,6 +9,7 @@ import com.github.ajalt.clikt.core.ProgramResult
 import com.github.ajalt.clikt.core.parse
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.options.check
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
@@ -72,6 +73,8 @@ class SkillAtlasCli(
     /** Runs the shell; tests replace it, since the real one needs a terminal. */
     private val shellView: (ShellSession) -> Unit = { ShellView(it).run() },
 ) {
+    private val multiScanner = MultiScanner(scanner)
+
     fun run(args: List<String>): Int {
         val command = RootCommand().subcommands(ScanCommand(), BrowseCommand(), ServeCommand(), ShellCommand())
         return try {
@@ -166,24 +169,28 @@ class SkillAtlasCli(
     }
 
     private inner class ScanCommand : CoreCliktCommand(name = "scan") {
-        private val url by argument(
+        private val urls by argument(
             name = "github-project-url",
-            help = "Repository to scan, e.g. https://github.com/owner/repo",
-        )
+            help = "Repositories to scan, e.g. https://github.com/owner/repo; give several to scan them together",
+        ).multiple(required = true)
 
-        private val filter by option("-f", "--filter", metavar = "<words>", help = "List only skills whose name or description has every word")
+        private val filter by option("-f", "--filter", metavar = "<words>", help = "List only skills whose name or description has every word; repo:<text> narrows repositories")
         private val skill by option("-s", "--skill", metavar = "<name-or-path>", help = "Show one skill's details, similar skills and content")
 
         override fun help(context: Context) =
-            "Scan the default branch of a GitHub repository and list its skills."
+            "Scan the default branch of GitHub repositories and list their skills."
 
         override fun run() {
             if (filter != null && skill != null) {
                 err.println("error: --filter and --skill can't be used together")
                 throw ProgramResult(ExitCode.USAGE)
             }
+            if (urls.size == 1) scanOne(urls.single()) else scanMany(urls)
+        }
+
+        private fun scanOne(url: String) {
             val result = try {
-                view.show { progress -> present(scanner.scan(url, progress)) }.result
+                view.show { progress -> present(scanner.scan(url, progress)) }.results.single()
             } catch (e: SkillAtlasException) {
                 err.println("error: ${e.message}")
                 throw ProgramResult(e.exitCode)
@@ -205,6 +212,41 @@ class SkillAtlasCli(
                 appendToScanLog(result)
                 throw e
             }
+        }
+
+        /** Several repositories (spec section 5.10): each failure is reported after the others, and the first one sets the exit code. */
+        private fun scanMany(urls: List<String>) {
+            var outcomes: List<RepositoryOutcome> = emptyList()
+            fun finish(extraError: SkillAtlasException? = null): Nothing? {
+                outcomes.filterIsInstance<RepositoryOutcome.Scanned>().forEach { appendToScanLog(it.result) }
+                val failures = outcomes.filterIsInstance<RepositoryOutcome.Failed>()
+                for (failure in failures) err.println("error: ${failure.label}: ${failure.error.message}")
+                if (extraError != null) err.println("error: ${extraError.message}")
+                val code = failures.firstOrNull()?.error?.exitCode ?: extraError?.exitCode
+                if (code != null) throw ProgramResult(code)
+                return null
+            }
+
+            try {
+                view.show { progress ->
+                    outcomes = multiScanner.scanAll(urls, progress)
+                    presentMany(outcomes)
+                }
+            } catch (e: SkillAtlasException) {
+                finish(extraError = e)
+            } catch (e: Exception) {
+                err.println("error: unexpected failure: ${e.message ?: e.javaClass.name}")
+                throw ProgramResult(ExitCode.INTERNAL_ERROR)
+            }
+            finish()
+        }
+
+        private fun presentMany(outcomes: List<RepositoryOutcome>): Presentation {
+            val selector = skill ?: return Presentation.MultiList(outcomes, filter?.takeIf { it.isNotBlank() })
+            val results = outcomes.filterIsInstance<RepositoryOutcome.Scanned>().map { it.result }
+            // With nothing scanned there is no skill to show; the summary and the errors say why.
+            if (results.isEmpty()) return Presentation.MultiList(outcomes)
+            return Presentation.detail(results, selector)
         }
     }
 

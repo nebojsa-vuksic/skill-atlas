@@ -29,7 +29,7 @@ skill-atlas scan <github-project-url>
 ```
 skill-atlas
 skill-atlas shell
-skill-atlas scan <github-project-url> [--filter <words>] [--skill <name-or-path>]
+skill-atlas scan <github-project-url>... [--filter <words>] [--skill <name-or-path>]
 skill-atlas browse <github-project-url>
 skill-atlas serve [--port <port>]
 skill-atlas --help
@@ -835,6 +835,107 @@ Enter runs the input as typed.
 - **Leaving.** `/quit`, Ctrl-D on an empty input, or Ctrl-C on an empty input stops the
   web view if it runs, puts the terminal back as it was, and exits `0`.
 
+### 5.10 Several repositories, with search
+
+`scan` and the web view work on several repositories at once. The filter searches across
+all of them. `browse` and the interactive shell stay single-repository for now.
+
+**Scanning.** Each repository is scanned exactly as in section 4, on its own. Up to 4 scans
+run at the same time. The results are combined in the order the URLs were given.
+Duplicate URLs, meaning the same `owner/repo` after normalizing, are scanned once. When one
+repository fails, the others are still reported (see *Failures* below).
+
+**Search syntax.** The filter of section 5.5 gains one qualifier, which works with one
+repository or many:
+- `repo:<text>` keeps only the skills of repositories whose `owner/name` contains `<text>`,
+  ignoring case. For example, `repo:mps test` means "skills matching `test` in
+  repositories whose name contains `mps`".
+- Several `repo:` words are alternatives: a repository qualifies when it matches any of
+  them.
+- The other words match skill names and full descriptions, as before.
+- `repo:` on its own, with no text, is ignored.
+
+Highlighting and snippets apply to the other words only.
+
+**Identity.** With several repositories, a skill is identified by `<owner>/<repo>:<path>`,
+for example `JetBrains/MPS:.agents/skills/mps-tests`, because paths repeat across
+repositories.
+
+**Similar skills.** With several repositories, similarity (section 5.6) is computed over the
+listed skills of **all** of them together. Similar skills from another repository show that
+repository's name, so the list points you to related skills elsewhere.
+
+#### CLI
+
+`scan <url> [<url>...]` accepts one or more URLs.
+
+- **One URL:** the output is exactly as before.
+- **Several URLs, plain format:** each repository's report follows section 5.2, including
+  the `--filter` header and items, separated by a line with 80 `─` characters. The report
+  ends with a summary line: `Scanned <m> repositories: <n> skills` (with `--filter`:
+  `Scanned <m> repositories: <k> of <n> skills match "<words>"`), and `, <f> failed` when
+  any failed.
+- **Several URLs, rich view:** the same sections and summary, with the styles of section
+  5.1.
+- **`--skill <selector>`** searches every repository. `<selector>` may be
+  `<owner>/<repo>:<path>`. A plain path or name that matches skills in more than one
+  repository is ambiguous: exit `2`, listing the matches as `<owner>/<repo>:<path>`.
+  Similar skills can come from any of the repositories, and their paths are then written
+  as `<owner>/<repo>:<path>`.
+- **Scan log:** one line per successfully scanned repository.
+- **Failures:** the report lists only the repositories that were scanned. Each failed
+  repository prints its `error: <owner>/<repo>: …` line (the section 7 message, prefixed
+  with the repository) to **stderr**, in URL order, after the report. The exit code is the
+  code of the **first** failure in URL order. It is `0` only if every repository succeeded.
+  `--skill` behaves the same way: it shows the skill if a scanned repository has it, and
+  still exits with the first failure's code.
+
+#### Web view
+
+- **Adding repositories.** The repository field accepts several URLs separated by spaces,
+  commas, or new lines. Each added repository appears as a **chip** under the field,
+  showing `owner/name` and its skill count, with an `×` button that removes it. The Scan
+  button scans the repositories that aren't loaded yet. The page URL keeps them all as
+  repeated `url` parameters: `?url=a&url=b&q=…&skill=owner/repo:path`.
+- **Summary.** For one repository, the summary is as before. For several, it's a compact
+  table with one row per repository: name (linked), description, commit, branch, and skill
+  count. A repository that failed shows its `error: …` message in its row, and the others
+  still load.
+- **Skill list.** Skills are grouped by repository, in the order the repositories were
+  added. Each group has a header with `owner/name` and the number of visible skills.
+  Headers stay pinned while their group scrolls. The filter and its `n of total` count
+  cover all repositories, and a group whose skills are all filtered out is hidden. With one
+  repository there is no group header.
+- **Right pane.** It shows the selected skill's repository name above the skill name.
+  Similar-skill rows from another repository show that repository name.
+- **API.** `GET /api/scans?url=<a>&url=<b>` returns the combined result:
+
+```json
+{
+  "repositories": [
+    {"url": "https://github.com/acme/skills", "name": "acme/skills", "description": "…", "branch": "main",
+     "commit": "<sha>", "skill_count": 3},
+    {"url": "https://github.com/acme/missing", "error": "repository acme/missing not found (…)", "exit_code": 3}
+  ],
+  "skills": [
+    {"repository": "acme/skills", "id": "acme/skills:skills/pdf", "name": "pdf-extract", "…": "the fields of /api/scan",
+     "similar": [{"repository": "acme/other", "id": "acme/other:skills/docx", "path": "skills/docx", "name": "docx", "score": 31}]}
+  ],
+  "ignored": [{"repository": "acme/skills", "path": "src/test/resources/skills/demo", "reason": "test data"}]
+}
+```
+
+  - The response is `200` whenever the request itself is valid, even if some repositories
+    failed.
+  - With no `url` parameter, or more than 10 of them, it returns `400` with an `error` and
+    `exit_code: 2`.
+  - `GET /api/scan` stays as it is, for one repository.
+  - **Cache:** the server keeps each successfully scanned repository's result for **10
+    minutes**, keyed by `owner/name`. Within that time `/api/scans` reuses the result
+    without cloning again, and without adding another scan log line. Adding a repository
+    therefore scans only the new one, and removing one scans nothing. Similar skills are
+    always recomputed over the requested set. Failed repositories are never cached.
+
 ## 6. Scan log
 
 Every successful scan is logged, in addition to the report on stdout.
@@ -934,6 +1035,11 @@ skill (section 4.3).
     its skill names. Each successful `/scan` appends one scan log line.
 22. Errors inside the shell are printed inline in red and the shell keeps running;
     Ctrl-C cancels a running `/scan` only.
+23. `scan <url> <url>` reports both repositories, and one failing repository doesn't hide
+    the other (section 5.10).
+24. The web view loads several repositories, groups their skills, and searches across all
+    of them, including with `repo:<text>`. Similar skills can point into another
+    repository (section 5.10).
 
 ## 11. Testing
 
@@ -1023,6 +1129,11 @@ They are meant for tests only.
 | `browse` without a terminal | Exit `2` and the exact message |
 | `browse` state | Unit tests for the three focus areas and every key in section 5.8, selection while filtering, and scrolling |
 | `browse` screen | Mosaic snapshot tests of the rendered frame at a fixed size |
+| Several repositories: search | `repo:` qualifier, alternatives, and combination with words; highlighting ignores `repo:` |
+| `scan` with several URLs | Exact plain output for two repositories, with separators and the summary; one failing repository (exit code of the first failure, and the other still reported); a duplicate URL is scanned once; one scan log line per repository |
+| `scan --skill` across repositories | `owner/repo:path` selector; a name found in two repositories exits `2` listing both; similar skills from another repository use `owner/repo:path` |
+| Web API `/api/scans` | Exact JSON for two repositories, including similar skills across them; a failed repository in its row with `200`; no `url` or more than 10 gives `400` |
+| Browser: several repositories | Adding two repositories shows chips and grouped lists; a `repo:` search narrows to one group; removing a chip drops its group; the URL restores repositories, filter, and selection; a similar skill in another repository opens it |
 | `browse` in a pseudo-terminal | Scripted keys (type a filter, move, jump to a similar skill, quit), waiting for markers on screen; exit `0`; one scan log line |
 | `skill-atlas` with no arguments, without a terminal | Exit `2`; the usage on stderr; stdout empty |
 | `shell` without a terminal | Exit `2` and the exact message; no scan log |
@@ -1058,6 +1169,10 @@ installs the browser's system libraries first with Playwright's `install-deps` c
 
 ## 12. Definition of done
 
+Every pull request follows `.github/pull_request_template.md`. A pull request that
+changes what users see includes a demo recorded as described in section 13.
+
+
 Every change goes through a pull request, managed with the GitHub CLI (`gh`). A change is
 done only when **all** of the following are true:
 
@@ -1090,3 +1205,69 @@ sandbox is an isolated copy of the repository with its own branch and its own ag
    any conflicts resolved, and it must go green again before it is merged. A pull
    request that was green before `main` changed is not done.
 4. After the last merge, CI on `main` must be green.
+
+## 13. Demo recordings
+
+A pull request that changes what users see includes a short demo video. The video comes
+from a **script**, not from a hand-made screen recording, so anyone can record it again,
+it looks the same every time, and no screen-recording permission is needed.
+
+### 13.1 Tools
+
+| What | Tool | Output |
+|------|------|--------|
+| Web view | Playwright video recording in headless Chromium, driven by a Node script | `.webm`, converted to `.mp4` and `.gif` with `ffmpeg` |
+| Terminal (`scan`, `browse`, shell) | VHS, driven by a `.tape` script | `.gif` and `.mp4` |
+
+`demo/package.json` pins Playwright to the same version as the Java tests. VHS
+(`brew install vhs`) brings `ffmpeg` and `ttyd` with it.
+
+### 13.2 Scripts
+
+Everything lives in `demo/`:
+
+- `demo/record.sh <name>` builds the distribution (`./gradlew installDist`). It starts
+  `skill-atlas serve` on a free port, runs the recording scripts for `<name>`, and stops
+  the server again, including when a step fails. The results go to `build/demo/<name>/`.
+- `demo/<name>/web.mjs` is a Playwright script: it opens the web view, types, clicks, and
+  pauses on each result long enough to read it (about 1.5 s).
+- `demo/<name>/terminal.tape` is a VHS script. It records at 1400×820 px, with the font at
+  16 px and a typing speed of 60 ms.
+- `demo/publish.sh <pr-number> <name>` publishes the files (section 13.3) and prints the
+  Markdown to paste into the pull request.
+
+The demo scripts run against real GitHub repositories, with `GITHUB_TOKEN=$(gh auth token)`,
+because a demo shows the real thing. They aren't tests and aren't part of `./gradlew build`.
+
+A demo file must stay small:
+- **Web GIF:** at most 30 s, 960 px wide, 10 fps, and under 8 MB.
+- **Terminal GIF:** under 5 MB.
+
+The `.mp4` is kept next to the GIF for full quality.
+
+### 13.3 Publishing
+
+Demo files never go into `main`. They live on an **orphan branch** called `demos`, which
+has no shared history with `main`, under `demos/pr-<number>/`. `demo/publish.sh`:
+
+1. Checks out `demos` in a temporary worktree, or creates the orphan branch if it doesn't
+   exist.
+2. Copies `build/demo/<name>/*` into `demos/pr-<number>/`.
+3. Commits and pushes `demos`.
+4. Prints Markdown for the pull request:
+
+```markdown
+![Web demo](https://github.com/<owner>/<repo>/blob/demos/demos/pr-<n>/web.gif?raw=true)
+[Full-quality video](https://github.com/<owner>/<repo>/blob/demos/demos/pr-<n>/web.mp4)
+```
+
+The repository is private, so these links work for people who have access to it. That's
+the same audience as the pull request.
+
+### 13.4 Skill
+
+How to record a demo is also captured as the `record-demo` skill
+(`.agents/skills/record-demo/SKILL.md`, with an identical copy in `.claude/skills/`). It
+covers a web view change, a terminal change, an interactive terminal view, recording
+again after a review, and common failures.
+

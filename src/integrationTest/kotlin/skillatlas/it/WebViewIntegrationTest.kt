@@ -39,7 +39,7 @@ class WebViewIntegrationTest {
         val script = web.get("/app.js")
         assertEquals(200, script.status)
         assertEquals("text/javascript; charset=utf-8", script.header("Content-Type"))
-        assertTrue("/api/scan?url=" in script.body)
+        assertTrue("/api/scans?" in script.body, "the page loads repositories through /api/scans (spec section 5.10)")
 
         val style = web.get("/style.css")
         assertEquals(200, style.status)

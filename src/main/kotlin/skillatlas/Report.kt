@@ -16,10 +16,28 @@ object TextReport {
     fun render(result: ScanResult): String = render(Presentation.SkillList(result))
 
     fun render(presentation: Presentation): String = buildString {
-        header(presentation.result)
         when (presentation) {
-            is Presentation.SkillList -> skillList(presentation)
-            is Presentation.SkillDetail -> skillDetail(presentation)
+            is Presentation.SkillList -> {
+                header(presentation.result)
+                skillList(presentation)
+            }
+            is Presentation.SkillDetail -> {
+                header(presentation.result)
+                skillDetail(presentation)
+            }
+            is Presentation.MultiList -> {
+                presentation.lists.forEachIndexed { i, list ->
+                    if (i > 0) {
+                        appendLine()
+                        appendLine(REPOSITORY_SEPARATOR)
+                        appendLine()
+                    }
+                    header(list.result)
+                    skillList(list)
+                }
+                if (presentation.lists.isNotEmpty()) appendLine()
+                appendLine(presentation.summary)
+            }
         }
     }
 
@@ -101,6 +119,9 @@ object TextReport {
 const val MAX_DESCRIPTION_LENGTH = 100
 
 const val SHIPPED_LABEL = "shipped in product"
+
+/** Between repositories when `scan` is given several URLs (spec section 5.10). */
+val REPOSITORY_SEPARATOR = "─".repeat(80)
 
 /** e.g. "Ignored 2 test fixtures (not skills)" (spec section 5.2). */
 fun ignoredHeading(count: Int) = "Ignored $count test ${if (count == 1) "fixture" else "fixtures"} (not skills)"

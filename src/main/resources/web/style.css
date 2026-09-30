@@ -454,3 +454,72 @@ button:disabled { opacity: 0.6; cursor: progress; }
 .ignored { margin-top: 28px; color: var(--muted); }
 .ignored h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
 .ignored ul { margin: 0; padding-left: 16px; }
+
+/* ---- Several repositories (spec section 5.10) ---- */
+
+.hint { color: var(--muted); font-weight: 400; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.chip.failed { border-color: var(--error); color: var(--error); }
+.chip-name { font-weight: 600; }
+.chip-count { color: var(--muted); font-size: 12px; }
+
+.chip-remove {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.chip-remove:hover { background: var(--border); color: var(--text); }
+
+.repo-table {
+  width: 100%;
+  margin: 20px 0 0;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 14px;
+}
+
+.repo-table th, .repo-table td { padding: 8px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+.repo-table th { color: var(--muted); font-weight: 500; font-size: 12px; }
+.repo-table tr:last-child td { border-bottom: 0; }
+.repo-table .count { text-align: right; font-variant-numeric: tabular-nums; }
+.repo-table .error-cell { color: var(--error); }
+
+.group-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.group-count { font-variant-numeric: tabular-nums; }
+
+.detail-repo { margin: 0 0 2px; color: var(--muted); font-size: 13px; font-weight: 600; }
+
+.similar-repo { color: var(--branch); }

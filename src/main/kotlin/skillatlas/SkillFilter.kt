@@ -8,8 +8,23 @@ object SkillFilter {
     private const val SNIPPET_CONTEXT = 40
     private val WHITESPACE = Regex("\\s+")
 
-    /** The query's words, lowercased; an empty list matches every skill. */
-    fun words(query: String): List<String> = query.lowercase().split(WHITESPACE).filter { it.isNotEmpty() }
+    private const val REPO_PREFIX = "repo:"
+
+    /** A parsed query: the words to find in skills, and the `repo:` qualifiers (spec section 5.10). */
+    data class Query(val words: List<String>, val repositories: List<String>) {
+        /** True when [repository] (`owner/name`) passes the `repo:` qualifiers; any one of them is enough. */
+        fun matchesRepository(repository: String): Boolean =
+            repositories.isEmpty() || repositories.any { it in repository.lowercase() }
+    }
+
+    fun parse(query: String): Query {
+        val tokens = query.lowercase().split(WHITESPACE).filter { it.isNotEmpty() }
+        val (repositories, words) = tokens.partition { it.startsWith(REPO_PREFIX) }
+        return Query(words, repositories.map { it.removePrefix(REPO_PREFIX) }.filter { it.isNotEmpty() })
+    }
+
+    /** The query's words, lowercased and without `repo:` qualifiers; an empty list matches every skill. */
+    fun words(query: String): List<String> = parse(query).words
 
     /** True when every word is in the skill's name or full description, ignoring case. */
     fun matches(skill: Skill, words: List<String>): Boolean {

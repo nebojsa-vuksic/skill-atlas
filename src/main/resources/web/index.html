@@ -15,19 +15,25 @@
     </header>
 
     <form id="scan-form" autocomplete="off">
-      <label for="url">GitHub repository</label>
+      <label for="url">GitHub repositories <span class="hint">(separate several with spaces or commas)</span></label>
       <div class="row">
-        <input id="url" name="url" type="text" required spellcheck="false"
+        <input id="url" name="url" type="text" spellcheck="false"
                placeholder="https://github.com/owner/repo">
         <button id="scan-button" type="submit">Scan</button>
       </div>
     </form>
+    <div id="repo-chips" class="chips" aria-label="Repositories" hidden></div>
 
     <p id="status" class="status" role="status" hidden><span class="spinner" aria-hidden="true"></span><span id="status-text"></span></p>
     <p id="error" class="error" role="alert" hidden></p>
 
     <section id="result" hidden>
-      <dl class="repository">
+      <table id="repo-table" class="repo-table" hidden>
+        <thead><tr><th>Repository</th><th>Description</th><th>Commit</th><th>Skills</th></tr></thead>
+        <tbody id="repo-rows"></tbody>
+      </table>
+
+      <dl id="repository" class="repository">
         <dt>Repository</dt>
         <dd><a id="repo-name" class="repo-name" target="_blank" rel="noopener noreferrer"></a></dd>
         <dt>Description</dt>
@@ -53,6 +59,7 @@
              aria-orientation="vertical" aria-controls="list-pane" aria-label="Resize panes"></div>
         <article id="detail" class="detail" aria-live="polite">
           <header>
+            <p id="detail-repo" class="detail-repo" hidden></p>
             <h2 id="detail-name" class="detail-name"></h2>
             <p id="detail-description" class="detail-description"></p>
             <div id="detail-paths" class="detail-paths"></div>

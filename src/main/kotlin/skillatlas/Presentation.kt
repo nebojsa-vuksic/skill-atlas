@@ -1,26 +1,89 @@
 package skillatlas
 
-/** What `scan` shows once the scan is done: the skill list, or one skill (spec sections 5 and 5.7). */
+/** What `scan` shows once the scan is done: the skill list, or one skill (spec sections 5, 5.7 and 5.10). */
 sealed interface Presentation {
-    val result: ScanResult
+    /** The repositories that were scanned successfully, each of which goes into the scan log. */
+    val results: List<ScanResult>
 
     /** All skills, or with a [query] only those that match it (spec section 5.7). */
-    data class SkillList(override val result: ScanResult, val query: String? = null) : Presentation {
+    data class SkillList(val result: ScanResult, val query: String? = null) : Presentation {
+        override val results: List<ScanResult> get() = listOf(result)
+
         val words: List<String>? = query?.let(SkillFilter::words)
-        val skills: List<Skill> = if (words == null) result.skills else SkillFilter.filter(result.skills, words)
+        val skills: List<Skill> = when {
+            query == null -> result.skills
+            !SkillFilter.parse(query).matchesRepository(result.repository.fullName) -> emptyList()
+            else -> SkillFilter.filter(result.skills, words.orEmpty())
+        }
     }
 
     /** One skill with its similar skills and file text, like the web view's right pane. */
     data class SkillDetail(
-        override val result: ScanResult,
+        val result: ScanResult,
         val skill: Skill,
         val similar: List<SimilarSkill>,
+        /** Every scanned repository; more than [result] when several were scanned. */
+        override val results: List<ScanResult> = listOf(result),
     ) : Presentation {
         val content: String? get() = result.contents[skill.path]
         val githubUrl: String get() = githubFileUrl(result, skill.path)
     }
 
+    /** Several repositories: one list per scanned repository, in URL order (spec section 5.10). */
+    data class MultiList(val outcomes: List<RepositoryOutcome>, val query: String? = null) : Presentation {
+        val lists: List<SkillList> = outcomes.filterIsInstance<RepositoryOutcome.Scanned>().map { SkillList(it.result, query) }
+        override val results: List<ScanResult> get() = lists.map { it.result }
+
+        /** e.g. `Scanned 2 repositories: 5 of 44 skills match "test", 1 failed`. */
+        val summary: String
+            get() {
+                val total = lists.sumOf { it.result.skills.size }
+                val counts = if (query == null) {
+                    "$total ${if (total == 1) "skill" else "skills"}"
+                } else {
+                    "${lists.sumOf { it.skills.size }} of $total skills match \"${sanitize(query)}\""
+                }
+                val failed = outcomes.count { it is RepositoryOutcome.Failed }
+                val repositories = if (lists.size == 1) "repository" else "repositories"
+                return "Scanned ${lists.size} $repositories: $counts" + if (failed > 0) ", $failed failed" else ""
+            }
+    }
+
     companion object {
+        /**
+         * `--skill` across several repositories (spec section 5.10): `owner/repo:path`, then a
+         * directory path, then a name. Similar skills come from all repositories, as ids.
+         */
+        fun detail(results: List<ScanResult>, selector: String): SkillDetail {
+            if (results.size == 1) return detail(results.single(), selector)
+            val value = selector.trim().removeSuffix("/")
+            val similar by lazy { crossRepositorySimilarity(results) }
+            fun found(result: ScanResult, skill: Skill) = SkillDetail(
+                result, skill, similar.getValue(skillId(result.repository.fullName, skill.path)), results,
+            )
+
+            val qualified = results.firstNotNullOfOrNull { result ->
+                val prefix = "${result.repository.fullName}:"
+                if (value.startsWith(prefix, ignoreCase = true)) result to value.substring(prefix.length) else null
+            }
+            if (qualified != null) {
+                val (result, path) = qualified
+                val skill = result.skills.firstOrNull { path == it.path || path in it.alsoAt }
+                    ?: throw SkillNotFoundException(selector, result.repository.fullName)
+                return found(result, skill)
+            }
+
+            fun matches(test: (Skill) -> Boolean) =
+                results.flatMap { result -> result.skills.filter(test).map { result to it } }
+            val byPath = matches { value == it.path || value in it.alsoAt }
+            val candidates = byPath.ifEmpty { matches { it.name.equals(value, ignoreCase = true) } }
+            return when (candidates.size) {
+                0 -> throw SkillNotFoundException(selector, results.joinToString(", ") { it.repository.fullName })
+                1 -> candidates.single().let { (result, skill) -> found(result, skill) }
+                else -> throw AmbiguousSkillException(selector, candidates.map { (result, skill) -> skillId(result.repository.fullName, skill.path) })
+            }
+        }
+
         /** The skill named by `--skill`: a directory path (copies included) first, then a name, ignoring case. */
         fun detail(result: ScanResult, selector: String): SkillDetail {
             val value = selector.trim().removeSuffix("/")
