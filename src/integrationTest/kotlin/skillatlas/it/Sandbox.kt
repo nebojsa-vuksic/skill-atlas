@@ -61,6 +61,8 @@ class Sandbox(private val root: Path) : AutoCloseable {
         git(work, "add", "--all")
         git(work, "commit", "--quiet", "--allow-empty", "--message", "Fixture")
         git(root, "clone", "--quiet", "--bare", work.toString(), bareRepository(fullName).toString())
+        // Like GitHub, serve partial clones, so tests exercise the CLI's blob-less sparse checkout.
+        git(bareRepository(fullName), "config", "uploadpack.allowFilter", "true")
         return git(work, "rev-parse", "HEAD").trim()
     }
 

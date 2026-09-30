@@ -70,8 +70,14 @@ with exit code `2` (see section 7).
    - `full_name` → repository name
    - `description` → repository description (may be `null`)
    - `default_branch` → the branch that is scanned
-3. **Get the repository contents** of the default branch with a shallow clone
-   (`git clone --depth 1 --branch <default-branch>`) into a temporary directory.
+3. **Get the repository contents** of the default branch into a temporary directory.
+   Only `SKILL.md` files are needed, so the clone is shallow and partial
+   (`git clone --depth 1 --branch <default-branch> --filter=blob:none --no-checkout`).
+   A sparse checkout (`git sparse-checkout set --no-cone SKILL.md`, then
+   `git checkout`) then downloads just the skill files. For large repositories this is
+   many times faster than a full checkout: `JetBrains/kotlin` drops from about 40 s to
+   about 4 s. If a server doesn't support partial clones, git sends the full contents,
+   and the result is the same.
    Scans always use the default branch; there is no option to choose another one.
 4. **Record the scanned commit** with `git rev-parse HEAD`.
 5. **Discover skills** (section 4.2).
@@ -239,7 +245,9 @@ Press Ctrl-C to stop.
 If the port is taken, it exits `1` with `error: could not listen on 127.0.0.1:<port>: <reason>`.
 
 **Page.** `GET /` serves a single page with a repository URL field and a Scan button.
-While a scan runs, the page shows a spinner and `Scanning <url>…`. The result uses the
+While a scan runs, the page shows a spinner and `Scanning <url>… <n>s`, with a counter
+that ticks every second. After 10 seconds it adds `(large repositories can take a minute)`,
+so a long clone never looks stuck. The result uses the
 same highlights as the rich terminal view:
 
 | Part | Style |

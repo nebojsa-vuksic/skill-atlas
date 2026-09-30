@@ -22,17 +22,31 @@ class Git(
         if (result.exitCode != 0) throw GitNotFoundException()
     }
 
-    /** Shallow-clones [branch] of [url] into [destination], which must not exist yet. */
+    /**
+     * Fetches the latest commit of [branch] from [url] into [destination], which must not
+     * exist yet. Only `SKILL.md` files are checked out: the clone is shallow, skips file
+     * contents up front (`--filter=blob:none`), and then downloads just the skill files
+     * through a sparse checkout. For large repositories this is many times faster than a
+     * full checkout. Servers without partial clone support simply send everything.
+     */
     fun shallowClone(url: String, branch: String, destination: Path, repository: RepoCoordinates) {
-        val command = listOf(
+        val environment = cloneEnvironment(url)
+        val clone = listOf(
             executable, "clone",
             "--depth", "1", "--branch", branch, "--single-branch", "--no-tags", "--quiet",
+            "--filter=blob:none", "--no-checkout",
             "--", url, destination.toString(),
         )
-        val result = run(command, cloneEnvironment(url))
-        if (result.exitCode == 0) return
+        run(clone, environment).failIfUnsuccessful(branch, repository)
 
-        val stderr = result.stderr
+        val git = listOf(executable, "-C", destination.toString())
+        run(git + listOf("sparse-checkout", "set", "--no-cone", SkillScanner.SKILL_FILE_NAME), environment)
+            .failIfUnsuccessful(branch, repository)
+        run(git + listOf("checkout", "--quiet"), environment).failIfUnsuccessful(branch, repository)
+    }
+
+    private fun ProcessResult.failIfUnsuccessful(branch: String, repository: RepoCoordinates) {
+        if (exitCode == 0) return
         throw when {
             stderr.contains("Remote branch", ignoreCase = true) && stderr.contains("not found", ignoreCase = true) ->
                 BranchNotFoundException(branch, repository)

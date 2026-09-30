@@ -8,11 +8,23 @@ function show(element, visible) {
   element.hidden = !visible;
 }
 
+let busyTimer = null;
+
+// Shows the status line with a running seconds counter, so a long clone never looks stuck.
 function setBusy(busy, message) {
   $("scan-button").disabled = busy;
   $("url").disabled = busy;
-  $("status-text").textContent = message || "";
+  clearInterval(busyTimer);
   show($("status"), busy);
+  if (!busy) return;
+  const started = Date.now();
+  const update = () => {
+    const seconds = Math.floor((Date.now() - started) / 1000);
+    $("status-text").textContent = message + " " + seconds + "s" +
+      (seconds >= 10 ? " (large repositories can take a minute)" : "");
+  };
+  update();
+  busyTimer = setInterval(update, 1000);
 }
 
 function element(tag, className, text) {
