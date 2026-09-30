@@ -1,5 +1,6 @@
 package skillatlas
 
+import java.util.stream.IntStream
 import kotlin.math.ln
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -11,6 +12,9 @@ data class SimilarSkill(val path: String, val name: String, val score: Int)
  * Finds similar skills with TF-IDF cosine similarity over words (spec section 5.6). It is a
  * deterministic heuristic: the same skills always give the same result, and nothing leaves
  * the machine.
+ *
+ * The heavy steps run in parallel, one skill per task. Word ids are still given in skill order
+ * and every sum is added up in a fixed order, so the result never depends on thread timing.
  */
 object SkillSimilarity {
     const val MAX_SIMILAR = 5
@@ -42,44 +46,32 @@ object SkillSimilarity {
      */
     fun compute(skills: List<Skill>, contents: Map<String, String>): Map<String, List<SimilarSkill>> {
         val count = skills.size
-        // Word ids in order of first appearance. Each skill's weights are summed in a scratch
-        // array indexed by word id, then stored as a sparse vector sorted by word id.
+        val skillWords = arrayOfNulls<SkillWords>(count)
+        parallel(count) { skillWords[it] = SkillWords.of(skills[it], contents[skills[it].path]) }
+
+        // Sparse vectors over global word ids, numbered in order of first appearance.
         val ids = HashMap<String, Int>()
-        var scratch = DoubleArray(1024)
-        val vectorIds = arrayOfNulls<IntArray>(count)
-        val vectorValues = arrayOfNulls<DoubleArray>(count)
-        for ((index, skill) in skills.withIndex()) {
-            val touched = ArrayList<Int>()
-            fun add(text: String, weight: Double) = forEachWord(text) { word ->
-                val id = ids.getOrPut(word) { ids.size }
-                if (id >= scratch.size) scratch = scratch.copyOf(maxOf(scratch.size * 2, id + 1))
-                if (scratch[id] == 0.0) touched += id
-                scratch[id] += weight
-            }
-            add(skill.name, NAME_WEIGHT)
-            add(skill.description, DESCRIPTION_WEIGHT)
-            contents[skill.path]?.let { add(SkillParser.body(it).take(MAX_BODY_LENGTH), BODY_WEIGHT) }
-            val sorted = touched.toIntArray().apply { sort() }
-            vectorIds[index] = sorted
-            vectorValues[index] = DoubleArray(sorted.size) { scratch[sorted[it]] }
-            for (id in sorted) scratch[id] = 0.0
+        val vectorIds = Array(count) { skill ->
+            val words = skillWords[skill]!!.words
+            IntArray(words.size) { ids.getOrPut(words[it]) { ids.size } }
         }
+        val vectorValues = Array(count) { skillWords[it]!!.weights }
 
         val documentFrequency = IntArray(ids.size)
-        for (vector in vectorIds) for (id in vector!!) documentFrequency[id]++
+        for (vector in vectorIds) for (id in vector) documentFrequency[id]++
         val idf = DoubleArray(ids.size) { ln((count + 1.0) / (documentFrequency[it] + 1.0)) + 1.0 }
 
-        // Unit-length TF-IDF vectors, and an inverted index from each word to the skills that have it.
+        // Unit-length TF-IDF vectors, and an inverted index from each word to the skills that have it, in skill order.
         val postingSkills = Array(ids.size) { IntArray(documentFrequency[it]) }
         val postingValues = Array(ids.size) { DoubleArray(documentFrequency[it]) }
         val postingSizes = IntArray(ids.size)
         for (skill in 0 until count) {
-            val sorted = vectorIds[skill]!!
-            val values = vectorValues[skill]!!
-            for (i in values.indices) values[i] *= idf[sorted[i]]
+            val vector = vectorIds[skill]
+            val values = vectorValues[skill]
+            for (i in values.indices) values[i] *= idf[vector[i]]
             val norm = sqrt(values.sumOf { it * it })
             if (norm > 0) for (i in values.indices) values[i] /= norm
-            for ((i, id) in sorted.withIndex()) {
+            for ((i, id) in vector.withIndex()) {
                 postingSkills[id][postingSizes[id]] = skill
                 postingValues[id][postingSizes[id]] = values[i]
                 postingSizes[id]++
@@ -88,54 +80,145 @@ object SkillSimilarity {
 
         // Each pair is compared once: skill a accumulates its dot products with every later skill b.
         val similarity = Array(count) { DoubleArray(count) }
-        for (a in 0 until count) {
+        parallel(count) { a ->
             val row = similarity[a]
-            val aIds = vectorIds[a]!!
-            val aValues = vectorValues[a]!!
-            for (i in aIds.indices) {
-                val skillsWithWord = postingSkills[aIds[i]]
-                val values = postingValues[aIds[i]]
-                // Postings are in skill order, so the later skills are the ones after a itself.
+            val vector = vectorIds[a]
+            val values = vectorValues[a]
+            for (i in vector.indices) {
+                val skillsWithWord = postingSkills[vector[i]]
+                val weights = postingValues[vector[i]]
                 var p = skillsWithWord.binarySearch(a) + 1
                 while (p < skillsWithWord.size) {
-                    row[skillsWithWord[p]] += aValues[i] * values[p]
+                    row[skillsWithWord[p]] += values[i] * weights[p]
                     p++
                 }
             }
-            for (b in a + 1 until count) similarity[b][a] = row[b]
         }
+        for (a in 0 until count) for (b in a + 1 until count) similarity[b][a] = similarity[a][b]
 
-        return skills.withIndex().associate { (a, skill) ->
-            skill.path to (0 until count)
-                .filter { it != a && similarity[a][it] >= MIN_SIMILARITY }
-                .sortedWith(compareByDescending<Int> { similarity[a][it] }.thenBy { skills[it].path })
-                .take(MAX_SIMILAR)
-                .map { SimilarSkill(skills[it].path, skills[it].name, (similarity[a][it] * 100).roundToInt()) }
+        val similar = arrayOfNulls<List<SimilarSkill>>(count)
+        parallel(count) { a ->
+            val row = similarity[a]
+            fun ranksBefore(b: Int, other: Int) = row[b] > row[other] || (row[b] == row[other] && skills[b].path < skills[other].path)
+            // The best skills so far, most similar first, kept by insertion.
+            val best = IntArray(MAX_SIMILAR)
+            var found = 0
+            for (b in 0 until count) {
+                if (b == a || row[b] < MIN_SIMILARITY) continue
+                var position = found
+                while (position > 0 && ranksBefore(b, best[position - 1])) position--
+                if (position == MAX_SIMILAR) continue
+                best.copyInto(best, position + 1, position, minOf(found, MAX_SIMILAR - 1))
+                best[position] = b
+                if (found < MAX_SIMILAR) found++
+            }
+            similar[a] = List(found) { SimilarSkill(skills[best[it]].path, skills[best[it]].name, (row[best[it]] * 100).roundToInt()) }
         }
+        return skills.indices.associate { skills[it].path to similar[it]!! }
     }
 
     /** The words of [text] that count for similarity, in order, e.g. `mps-tests` gives `mps` and `test`. */
-    fun words(text: String): List<String> = buildList { forEachWord(text) { add(it) } }
+    fun words(text: String): List<String> = buildList { forEachWord(text, text.length) { buffer, length -> add(String(buffer, 0, length)) } }
 
-    /** Calls [action] with each word of [text] that counts, lowercased and without a plural `s`. */
-    private inline fun forEachWord(text: String, action: (String) -> Unit) {
-        val buffer = CharArray(text.length)
-        var start = 0
-        while (start < text.length) {
-            while (start < text.length && !text[start].isLetterOrDigit()) start++
+    private fun parallel(count: Int, action: (Int) -> Unit) = IntStream.range(0, count).parallel().forEach { action(it) }
+
+    /** One skill's words in order of first appearance, each with its summed weight. */
+    private class SkillWords(val words: List<String>, val weights: DoubleArray) {
+        companion object {
+            fun of(skill: Skill, file: String?): SkillWords {
+                val words = WordTable()
+                var weights = DoubleArray(64)
+                fun add(text: String, end: Int, weight: Double) = forEachWord(text, end) { buffer, length ->
+                    val id = words.idOf(buffer, length)
+                    if (id == weights.size) weights = weights.copyOf(weights.size * 2)
+                    weights[id] += weight
+                }
+                add(skill.name, skill.name.length, NAME_WEIGHT)
+                add(skill.description, skill.description.length, DESCRIPTION_WEIGHT)
+                val body = file?.let(SkillParser::body).orEmpty()
+                add(body, minOf(body.length, MAX_BODY_LENGTH), BODY_WEIGHT)
+                return SkillWords(words.words, weights.copyOf(words.words.size))
+            }
+        }
+    }
+
+    private val STOPWORD_TABLE = WordTable().apply { for (word in STOPWORDS) idOf(word.toCharArray(), word.length) }
+
+    /**
+     * Calls [action] with each word of `text[0, end)` that counts, lowercased and without a
+     * plural `s`, held in `buffer[0, length)`. A word seen before then costs no allocation.
+     */
+    private inline fun forEachWord(text: String, end: Int, action: (buffer: CharArray, length: Int) -> Unit) {
+        // Plain array reads and an ASCII fast path keep this loop quick even before the JIT compiles it.
+        val chars = text.toCharArray(0, end)
+        val buffer = CharArray(end)
+        var i = 0
+        while (i < end) {
             var length = 0
             var digitsOnly = true
-            while (start + length < text.length && text[start + length].isLetterOrDigit()) {
-                val c = text[start + length]
-                buffer[length++] = c.lowercaseChar()
-                if (!c.isDigit()) digitsOnly = false
+            while (i < end) {
+                val c = wordChar(chars[i])
+                if (c == NOT_A_WORD_CHAR) break
+                buffer[length++] = c
+                if (digitsOnly && c !in '0'..'9' && (c < '\u0080' || !c.isDigit())) digitsOnly = false
+                i++
             }
-            start += length
-            if (length < 3 || digitsOnly) continue
-            val word = String(buffer, 0, length)
-            if (word in STOPWORDS) continue
+            i++
+            if (length < 3 || digitsOnly || STOPWORD_TABLE.contains(buffer, length)) continue
             val plural = length > 4 && buffer[length - 1] == 's' && buffer[length - 2] != 's'
-            action(if (plural) word.substring(0, length - 1) else word)
+            action(buffer, if (plural) length - 1 else length)
+        }
+    }
+
+    private const val NOT_A_WORD_CHAR = '\u0000'
+
+    /** [c] lowercased if it is a letter or digit, else [NOT_A_WORD_CHAR]. */
+    private fun wordChar(c: Char): Char = when {
+        c in 'a'..'z' || c in '0'..'9' -> c
+        c in 'A'..'Z' -> c + ('a' - 'A')
+        c < '\u0080' -> NOT_A_WORD_CHAR
+        c.isLetterOrDigit() -> c.lowercaseChar()
+        else -> NOT_A_WORD_CHAR
+    }
+
+    /** Numbers words in order of first appearance, looking them up straight from a char buffer. */
+    private class WordTable {
+        val words = ArrayList<String>()
+        private var slots = IntArray(256) { -1 }
+
+        fun contains(buffer: CharArray, length: Int) = slots[slot(buffer, length)] >= 0
+
+        fun idOf(buffer: CharArray, length: Int): Int {
+            val slot = slot(buffer, length)
+            if (slots[slot] >= 0) return slots[slot]
+            slots[slot] = words.size
+            words += String(buffer, 0, length)
+            if (words.size * 2 > slots.size) grow()
+            return words.size - 1
+        }
+
+        /** The slot holding the word's id, or the empty slot where it would go. */
+        private fun slot(buffer: CharArray, length: Int): Int {
+            var hash = 0
+            for (i in 0 until length) hash = 31 * hash + buffer[i].code
+            return probe(hash) { id -> words[id].let { it.length == length && it.regionMatches(buffer, length) } }
+        }
+
+        private inline fun probe(hash: Int, matches: (Int) -> Boolean): Int {
+            val mask = slots.size - 1
+            var slot = (hash * -0x61c88647) ushr 8 and mask
+            while (slots[slot] >= 0 && !matches(slots[slot])) slot = (slot + 1) and mask
+            return slot
+        }
+
+        private fun String.regionMatches(buffer: CharArray, length: Int): Boolean {
+            for (i in 0 until length) if (this[i] != buffer[i]) return false
+            return true
+        }
+
+        private fun grow() {
+            slots = IntArray(slots.size * 2) { -1 }
+            for ((id, word) in words.withIndex()) slots[probe(word.hashCode()) { false }] = id
         }
     }
 }
