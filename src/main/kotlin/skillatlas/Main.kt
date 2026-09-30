@@ -67,13 +67,16 @@ class SkillAtlasCli(
     private val out: PrintStream = System.out,
     private val err: PrintStream = System.err,
     private val clock: Clock = Clock.systemUTC(),
-    /** True when stdin and stdout are both terminals, which `browse` needs. */
+    /** True when stdin and stdout are both terminals, which `browse` and `shell` need. */
     private val interactive: Boolean = false,
+    /** Runs the shell; tests replace it, since the real one needs a terminal. */
+    private val shellView: (ShellSession) -> Unit = { ShellView(it).run() },
 ) {
     fun run(args: List<String>): Int {
-        val command = RootCommand().subcommands(ScanCommand(), BrowseCommand(), ServeCommand())
+        val command = RootCommand().subcommands(ScanCommand(), BrowseCommand(), ServeCommand(), ShellCommand())
         return try {
-            command.parse(args)
+            // No arguments in a terminal opens the shell; elsewhere it stays a usage error (spec section 3.1).
+            command.parse(if (args.isEmpty() && interactive) listOf("shell") else args)
             ExitCode.OK
         } catch (e: ProgramResult) {
             e.statusCode
@@ -125,6 +128,20 @@ class SkillAtlasCli(
         }
     }
 
+    private inner class ShellCommand : CoreCliktCommand(name = "shell") {
+        override fun help(context: Context) =
+            "Open the interactive shell: slash commands with a palette (also what no arguments does in a terminal)."
+
+        override fun run() {
+            if (!interactive) {
+                err.println("error: ${NotATerminalException("shell").message}")
+                throw ProgramResult(ExitCode.USAGE)
+            }
+            val session = ShellSession(scanner, scanLog, clock) { port, warn -> WebServer(scanner, scanLog, clock, warn).start(port) }
+            shellView(session)
+        }
+    }
+
     private inner class BrowseCommand : CoreCliktCommand(name = "browse") {
         private val url by argument(
             name = "github-project-url",
@@ -136,7 +153,7 @@ class SkillAtlasCli(
 
         override fun run() {
             try {
-                if (!interactive) throw NotATerminalException()
+                if (!interactive) throw NotATerminalException("browse")
                 BrowseView(onScanned = ::appendToScanLog).run { progress -> scanner.scan(url, progress) }
             } catch (e: SkillAtlasException) {
                 err.println("error: ${e.message}")

@@ -65,5 +65,5 @@ class AmbiguousSkillException(selector: String, paths: List<String>) :
         ExitCode.USAGE,
     )
 
-class NotATerminalException :
-    SkillAtlasException("browse needs an interactive terminal; use \"skill-atlas scan\" instead", ExitCode.USAGE)
+class NotATerminalException(command: String) :
+    SkillAtlasException("$command needs an interactive terminal; use \"skill-atlas scan\" instead", ExitCode.USAGE)

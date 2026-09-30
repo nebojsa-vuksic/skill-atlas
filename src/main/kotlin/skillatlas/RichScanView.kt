@@ -82,38 +82,54 @@ internal fun Report(result: ScanResult, columns: Int) = Report(Presentation.Skil
 @Composable
 internal fun Report(presentation: Presentation, columns: Int) {
     val result = presentation.result
-    val repository = result.repository
     // One column of padding plus a two-column skill indent, and one spare so lines never wrap.
     // Terminals that report no size get the full limit.
     val descriptionLength =
         if (columns <= 0) MAX_DESCRIPTION_LENGTH else (columns - 5).coerceIn(20, MAX_DESCRIPTION_LENGTH)
 
     Column(modifier = Modifier.padding(horizontal = 1)) {
-        Text(" SKILL ATLAS ", textStyle = TextStyle.Bold + TextStyle.Invert)
-        Text("")
-
-        Field("Repository") {
-            Text(sanitize(repository.fullName), color = Color.Cyan, textStyle = TextStyle.Bold)
-        }
-        Field("Description") {
-            val description = repository.description?.let(::shortenDescription)?.ifBlank { null }
-            if (description == null) {
-                Text("(none)", textStyle = TextStyle.Dim)
-            } else {
-                Text(description, textStyle = TextStyle.Italic)
-            }
-        }
-        Field("Commit") {
-            Text(result.commit, color = Color.Yellow, textStyle = TextStyle.Bold)
-            Text("  ")
-            Text(sanitize(result.branch), color = Color.Magenta)
-        }
+        RepositoryHeader(result)
         Text("")
 
         when (presentation) {
             is Presentation.SkillList -> SkillListReport(presentation, descriptionLength)
             is Presentation.SkillDetail -> SkillDetailReport(presentation)
         }
+    }
+}
+
+/** The title and the repository, description and commit fields that start every report. */
+@Composable
+internal fun RepositoryHeader(result: ScanResult) {
+    val repository = result.repository
+    Text(" SKILL ATLAS ", textStyle = TextStyle.Bold + TextStyle.Invert)
+    Text("")
+
+    Field("Repository") {
+        Text(sanitize(repository.fullName), color = Color.Cyan, textStyle = TextStyle.Bold)
+    }
+    Field("Description") {
+        val description = repository.description?.let(::shortenDescription)?.ifBlank { null }
+        if (description == null) {
+            Text("(none)", textStyle = TextStyle.Dim)
+        } else {
+            Text(description, textStyle = TextStyle.Italic)
+        }
+    }
+    Field("Commit") {
+        Text(result.commit, color = Color.Yellow, textStyle = TextStyle.Bold)
+        Text("  ")
+        Text(sanitize(result.branch), color = Color.Magenta)
+    }
+}
+
+/** `<n> skills found`, or `No skills found.` */
+@Composable
+internal fun SkillCount(total: Int) {
+    if (total == 0) {
+        Text("No skills found.", color = Color.Yellow)
+    } else {
+        Text("$total ${if (total == 1) "skill" else "skills"} found", color = Color.Green, textStyle = TextStyle.Bold)
     }
 }
 
@@ -125,8 +141,7 @@ private fun SkillListReport(list: Presentation.SkillList, descriptionLength: Int
     val skills = list.skills
     val query = sanitize(list.query.orEmpty())
     when {
-        total == 0 -> Text("No skills found.", color = Color.Yellow)
-        words == null -> Text("$total ${if (total == 1) "skill" else "skills"} found", color = Color.Green, textStyle = TextStyle.Bold)
+        total == 0 || words == null -> SkillCount(total)
         skills.isEmpty() -> Text("No skills match \"$query\".", color = Color.Yellow)
         else -> Text("${skills.size} of $total skills match \"$query\"", color = Color.Green, textStyle = TextStyle.Bold)
     }
@@ -167,16 +182,7 @@ private fun SkillDetailReport(detail: Presentation.SkillDetail) {
     Text("")
 
     Text("Similar skills", textStyle = TextStyle.Dim)
-    if (detail.similar.isEmpty()) Text("  No similar skills found.", textStyle = TextStyle.Dim)
-    val width = detail.similar.maxOfOrNull { it.name.length } ?: 0
-    for (similar in detail.similar) {
-        Row {
-            Text("  ${sanitize(similar.name).padEnd(width)}  ", textStyle = TextStyle.Bold)
-            Text(similarityBar(similar.score), color = Color.Cyan)
-            Text(" ${"%3d %%".format(similar.score)}  ", textStyle = TextStyle.Bold)
-            Text(sanitize(similar.path), textStyle = TextStyle.Dim)
-        }
-    }
+    SimilarRows(detail.similar)
     Text("")
 
     Text("SKILL.md", textStyle = TextStyle.Dim)
@@ -185,6 +191,21 @@ private fun SkillDetailReport(detail: Presentation.SkillDetail) {
         Text("  (content not available)", textStyle = TextStyle.Dim)
     } else {
         for (line in content.lines()) Text(if (line.isEmpty()) "" else "  $line")
+    }
+}
+
+/** The similar-skills rows of section 5.7: name, bar, score and path, or `No similar skills found.` */
+@Composable
+internal fun SimilarRows(similar: List<SimilarSkill>) {
+    if (similar.isEmpty()) Text("  No similar skills found.", textStyle = TextStyle.Dim)
+    val width = similar.maxOfOrNull { it.name.length } ?: 0
+    for (row in similar) {
+        Row {
+            Text("  ${sanitize(row.name).padEnd(width)}  ", textStyle = TextStyle.Bold)
+            Text(similarityBar(row.score), color = Color.Cyan)
+            Text(" ${"%3d %%".format(row.score)}  ", textStyle = TextStyle.Bold)
+            Text(sanitize(row.path), textStyle = TextStyle.Dim)
+        }
     }
 }
 
@@ -213,7 +234,7 @@ private fun Tags(skill: Skill) {
 }
 
 @Composable
-private fun Field(label: String, value: @Composable () -> Unit) {
+internal fun Field(label: String, value: @Composable () -> Unit) {
     Row {
         Text(label.padEnd(LABEL_WIDTH), textStyle = TextStyle.Dim)
         value()

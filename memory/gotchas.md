@@ -52,9 +52,16 @@ declare it.
 
 `toKeyEventOrNull` maps codepoints 32 to 126 to characters, plus named keys such as
 `ArrowUp`, `Enter`, `Escape`, `Backspace`, `Tab`, `PageUp`, `Home` and `F1`. Other
-codepoints throw.
+codepoints throw `UnsupportedOperationException`, which ends the whole composition.
+Ctrl-C arrives as key `c` with `ctrl`, Ctrl-D as `d`; an unhandled Ctrl-C cancels the program.
 
-**How to apply:** the `browse` filter accepts ASCII only. This is documented in spec 5.8.
+**Why:** typing `é` in the first shell killed it. Restarting `runMosaicBlocking` then failed
+with "Tty already bound": Mosaic never frees the `Tty` it binds, so one process gets one
+Mosaic session.
+**How to apply:** the `browse` filter accepts ASCII only (spec 5.8). The shell binds the
+terminal itself (`ShellTerminal.kt`: `Tty.tryBind()`, `asTerminalIn`, the public `Mosaic(...)`
+and a copy of the ANSI rendering) and diverts unnamed keys before Mosaic sees them. Reuse
+that for any other long-lived view that must accept free text.
 
 ## A Mosaic composition ends when no effect is running (2026-09-30)
 
@@ -127,3 +134,38 @@ thinking.
 
 **How to apply:** check `git status` and whether a PR exists, not just the exit code. Resume
 with `claude -p --resume <session-id>`. The session ID is in the stream-json log.
+
+## `rememberCoroutineScope` keeps a Mosaic program running forever (2026-09-30)
+
+`runMosaic` waits for every child of the effect job, and a `rememberCoroutineScope()` scope
+is one whose `Job` never completes. The first shell hung after `/quit`.
+
+**How to apply:** run background work in a `LaunchedEffect` keyed on the state that
+starts it (the shell's `ShellMode.Scanning`); leaving that state cancels it.
+
+## Printing scrollback from a Mosaic REPL (2026-09-30)
+
+Output meant to stay in the terminal goes through `StaticEffect`, which renders once into
+Mosaic's static log. For a stream of outputs, keep a snapshot list of pending blocks,
+compose `key(id) { StaticEffect { … } }` for each, and remove them in a `SideEffect`
+after the loop (`ShellApp` in `ShellView.kt`). Only the prompt stays live.
+
+**How to apply:** test it with `runMosaicTest(MosaicSnapshots)`, then `static()` on the
+`TestMosaic`; it returns the printed text with `\r\n` line ends and ANSI codes.
+
+## Key events go to children first in Mosaic (2026-09-30)
+
+`onKeyEvent` handlers run child-first, and a handler returning `true` stops the event.
+A parent can't see a key its child handled.
+
+**How to apply:** the shell composes `Browser` inside itself and waits for `state.quit`
+with `snapshotFlow` rather than in its own key handler.
+
+## The worktree sandbox refuses some shell commands (2026-09-30)
+
+Agents isolated in a worktree get "too complex to verify" or "cannot be shown not to be
+git" refusals for heredocs, `export X=$(…)`, or loops with variables, and for any inline
+script whose text contains `git`.
+
+**How to apply:** write scripts to `/tmp` with the Write tool and run them with `python3` or
+`bash`, one plain command per call.

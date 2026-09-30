@@ -778,7 +778,7 @@ Enter runs the input as typed.
 | `/browse` | yes | Opens the full-screen `browse` view (section 5.8) on the current repository. `q` or Ctrl-C returns to the shell. |
 | `/repo` | yes | Shows the current repository's summary: name, description, commit and branch, and the skill count. |
 | `/serve [port]` | no | Starts the web view (section 5.4) in the background, on port `8421` unless given, `0` for any free port, and prints `Skill Atlas web view: <url>`. `/serve stop` stops it. |
-| `/log` | no | Shows the last 10 entries of the scan log (section 6), oldest first: time, repository, the first 12 characters of the commit, branch, and skill count. |
+| `/log` | no | Shows the last 10 entries of the scan log (section 6), oldest first, one per line: time (dim), repository (bold cyan), the first 12 characters of the commit (yellow), branch (magenta), and `<n> skills`, in aligned columns. `No scans logged yet.` when the log is empty or missing. |
 | `/help` | no | Lists the commands and the keys. |
 | `/quit` | no | Leaves the shell. |
 
@@ -814,11 +814,14 @@ Enter runs the input as typed.
 
 - **History.** Every non-empty input that is run is added to this session's history,
   except a repeat of the previous entry. ↑ steps back through it, ↓ forward, and going
-  past the newest entry brings back what was typed before walking the history. The
-  history is not saved between sessions.
-- **Characters.** As in `browse`, only printable ASCII characters can be typed, because
-  that is what Mosaic reports as keys. If the terminal sends any other character, the
-  shell prints `error: only ASCII characters can be typed` and carries on.
+  past the newest entry brings back what was typed before walking the history. A
+  recalled input keeps the palette closed until it is edited, so ↑ and ↓ keep walking
+  the history. The history is not saved between sessions.
+- **Characters.** Any printable character can be typed, including non-ASCII ones such as
+  `é` or a pasted `—`. Mosaic only reports printable ASCII and its named keys, and ends
+  the program on anything else, so the shell reads the terminal's key events itself and
+  passes only those keys on to Mosaic. Other keys, such as ones with no name, are
+  ignored.
 
 **Running commands.**
 - **Scanning.** During `/scan`, the prompt is replaced by the spinner status line of
