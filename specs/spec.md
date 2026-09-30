@@ -27,7 +27,8 @@ skill-atlas scan <github-project-url>
 ### 3.1 Synopsis
 
 ```
-skill-atlas scan <github-project-url>
+skill-atlas scan <github-project-url> [--filter <words>] [--skill <name-or-path>]
+skill-atlas browse <github-project-url>
 skill-atlas serve [--port <port>]
 skill-atlas --help
 skill-atlas --version
@@ -60,6 +61,11 @@ with exit code `2` (see section 7).
 | `-h, --help` | | Print usage and exit `0`. |
 | `-V, --version` | | Print the version and exit `0`. |
 | `-p, --port <port>` | `8421` | `serve` only. Port for the web view. `0` picks a free port. |
+| `-f, --filter <words>` | | `scan` only. List only the skills that match `<words>`, by the rules in section 5.5 (section 5.7). |
+| `-s, --skill <name-or-path>` | | `scan` only. Show one skill's details, similar skills, and content instead of the list (section 5.7). |
+
+`--filter` and `--skill` can't be used together. Passing both exits `2` with
+`error: --filter and --skill can't be used together`.
 
 ## 4. Behavior
 
@@ -519,6 +525,174 @@ order above. The list is empty when there are no similar skills.
 **Performance.** Vectors are sparse, and every pair is compared once. A repository with
 500 skills must finish this step in under 1 second.
 
+### 5.7 Filter and skill details in the CLI
+
+The web view's filter and right pane are also available in `scan`, for scripts and for
+quick lookups. They use the same core as the web view: the filter rules from section 5.5
+(ported to Kotlin) and the similarity from section 5.6. As with the rest of `scan`, the
+output is the rich view in a terminal and plain text when stdout is piped (section 5).
+
+**`scan <url> --filter <words>`** narrows the list.
+
+- **Which skills are listed:** only matching skills, in their usual order. A skill
+  matches when every word is in its name or full description, ignoring case.
+- **Description line:** the same rule as the web view. If a word appears only past the
+  shortened description, the line shows a snippet around the first match instead.
+- **Header, plain format:** `Found <total> skills, <n> match "<words>":`, or
+  `Found <total> skills, none match "<words>".` when nothing matches.
+- **Header, rich view:** `<n> of <total> skills match "<words>"` in bold green, or
+  `No skills match "<words>".` in yellow when nothing matches.
+- **Highlighting, rich view only:** matched text in names and description lines is shown
+  black on yellow.
+- Paths, `also in` lines, tags, and the ignored test fixtures section are the same as
+  without a filter.
+
+Plain example:
+
+```
+Found 41 skills, 2 match "test run":
+
+  mps-run-configurations  [shipped in product]
+    Use when creating, editing or debugging MPS run configurations — Java classes with…
+    .agents/skills/mps-run-configurations
+    also in .claude/skills/mps-run-configurations
+
+  mps-tests  [shipped in product]
+    …
+```
+
+**`scan <url> --skill <name-or-path>`** prints one skill in place of the list, with the
+same information as the web view's right pane.
+
+- **Finding the skill:** the value first matches any skill directory path, including
+  `also in` copies. Otherwise it matches a skill name, ignoring case.
+- **No match:** exit `6` with `error: no skill '<value>' in <owner>/<repo>`.
+- **Several skills with that name:** exit `2` with
+  `error: skill name '<value>' matches <n> skills: <path>, <path>; pass a path instead`.
+
+Plain format:
+
+```
+Repository:  JetBrains/MPS
+Description: JetBrains Meta programming System
+Commit:      49d37b63488a0a8e42eb0130cb867fd508f398ac (master)
+
+Skill:       mps-tests  [shipped in product]
+Path:        .agents/skills/mps-tests
+Also in:     .claude/skills/mps-tests
+             plugins/mcp-tools/resources/jetbrains/mps/agents/mcp/skills/mps-tests
+GitHub:      https://github.com/JetBrains/MPS/blob/49d37b…/.agents/skills/mps-tests/SKILL.md
+
+Description:
+  Use when writing or modifying tests inside MPS `@tests` models — …
+
+Similar skills:
+  mps-language-aspects-overview  ████░░░░░░  42 %  .agents/skills/mps-language-aspects-overview
+  mps-mcp-workflow               ████░░░░░░  39 %  .agents/skills/mps-mcp-workflow
+
+SKILL.md:
+  ---
+  name: mps-tests
+  …
+```
+
+Rules for the plain format:
+- **`Also in:`** is left out when there are no copies. Tags and warnings follow the name
+  as in section 5.2.
+- **Description:** the **full** description, never shortened, with each line indented
+  two spaces. `(no description)` when it's missing.
+- **Similar skills rows:** the name padded to the longest similar name, then a 10-cell
+  bar with `round(score / 10)` `█` cells and the rest `░`, then the score right-aligned
+  as `NN %`, then the path. `No similar skills found.` when there are none.
+- **`SKILL.md:`** the exact file text, each line indented two spaces, or
+  `(content not available)`.
+
+The rich view has the same sections, with the styles of section 5.1:
+- labels dim
+- skill name bold cyan
+- bar cyan
+- score bold
+- paths dim
+
+A `--filter` or `--skill` scan is still a scan: it appends one line to the scan log.
+
+### 5.8 Interactive browser (`browse`)
+
+`skill-atlas browse <url>` scans like `scan`, then opens a full-screen, keyboard-driven
+version of the web view in the terminal. It is built with Mosaic.
+
+- **Needs a terminal.** If stdin or stdout isn't a terminal, it exits `2` with
+  `error: browse needs an interactive terminal; use "skill-atlas scan" instead`.
+- **Scanning.** It shows the same live status line as `scan` (section 5.1). Scan errors
+  exit with the codes and messages of section 7, and a successful scan appends one line
+  to the scan log.
+- **Size.** The view fills the terminal's current size, and it adapts when the terminal
+  is resized.
+
+```
+ SKILL ATLAS  JetBrains/MPS  49d37b63488a master
+ / test▏                  5 of 41 │ mps-tests  ◆ shipped in product
+ ─────────────────────────────────│ Use when writing or modifying tests inside MPS
+ mps-aspect-typesystem      ◆ ⧉2  │ `@tests` models — `NodesTestCase` (typesystem, …
+ …WhenConcrete test statement…    │ .agents/skills/mps-tests
+                                  │ also in .claude/skills/mps-tests
+▌mps-tests                  ◆ ⧉2  │
+▌Use when writing or modifying t… │ Similar skills
+                                  │ ▸ mps-language-aspects-overview  ████░░░░░░  42 %
+ mps-run-configurations     ◆ ⧉2  │   mps-mcp-workflow               ████░░░░░░  39 %
+ …JUnit Tests for ITestCase…      │
+                                  │ SKILL.md
+                                  │ ---
+                                  │ name: mps-tests
+ ↑↓ select  / filter  tab similar  pgup/pgdn scroll  q quit
+```
+
+**Layout:**
+- **Top line:** ` SKILL ATLAS ` (bold, inverted), the repository name (bold cyan), the
+  first 12 characters of the commit (yellow), and the branch (magenta).
+- **Left pane:** 40 % of the width, clamped to between 28 columns and the width minus 40.
+  - It starts with the filter line: `/ ` and the query, with a `▏` cursor while the
+    filter has focus, or a dim `/ filter` placeholder when empty. The `<n> of <total>`
+    count is right-aligned on the same line, accent-colored while a filter is active.
+  - A rule follows, then the skills, each with the compact look of section 5.4: a name
+    line with icons (`◆`, `⚠`, `⧉ n`) at the right end, and one dim description line.
+    Both lines are cut with `…` to fit, and a blank line follows each skill.
+  - Matches are highlighted as in section 5.7. The selected skill has a `▌` accent bar and
+    a bold name.
+  - The list scrolls to keep the selection visible. With no match, it shows
+    `No skills match "<query>".`
+- **Right pane,** after a `│` column: the selected skill.
+  - The name with its tags.
+  - The full description, wrapped, at most 6 lines, then `…`.
+  - The path and its `also in` copies, dim.
+  - `Similar skills`, with rows like the ones in section 5.7.
+  - `SKILL.md`, with the file text wrapped to the pane width.
+  - Content that doesn't fit is scrolled with PgUp and PgDn.
+- **Bottom line:** the key help for the current focus, dim.
+
+**Keys.** There are three focus areas: the list (the default), the filter, and similar
+skills.
+
+| Focus | Key | Effect |
+|-------|-----|--------|
+| List | ↑ / ↓, Home / End | Select the previous / next, first / last visible skill; the right pane scrolls back to the top |
+| List | `/` | Focus the filter |
+| List | Tab | Focus similar skills (if the selected skill has any) |
+| List | Esc | Clear the filter |
+| List | PgUp / PgDn | Scroll the right pane by its height minus one line |
+| List | `q`, Ctrl-C | Quit |
+| Filter | printable characters, Backspace | Edit the query; the list updates at once |
+| Filter | Enter, ↓ | Back to the list, keeping the query |
+| Filter | Esc | Clear the query and go back to the list |
+| Similar | ↑ / ↓ | Move the `▸` cursor |
+| Similar | Enter | Select that skill (clearing the filter first if it hides it) and go back to the list |
+| Similar | Tab, Esc | Back to the list |
+
+Ctrl-C quits from any focus. Filtering follows section 5.5: it keeps the selection when
+the skill is still visible, and otherwise selects the first visible skill. Only
+printable ASCII characters can be typed into the filter, because that's what Mosaic
+reports as keys. Quitting puts the terminal back as it was and exits `0`.
+
 ## 6. Scan log
 
 Every successful scan is logged, in addition to the report on stdout.
@@ -545,6 +719,7 @@ Every successful scan is logged, in addition to the report on stdout.
 | `3` | Repository not found or not accessible | `error: repository owner/repo not found (is it private? set GITHUB_TOKEN)` |
 | `4` | Default branch cannot be cloned, e.g. the repository is empty | `error: branch 'main' not found in owner/repo (is the repository empty?)` |
 | `5` | Network or GitHub API failure, including rate limiting | `error: GitHub API rate limit exceeded; set GITHUB_TOKEN to raise the limit` |
+| `6` | `--skill` names no skill in the repository | `error: no skill 'pdf' in owner/repo` |
 | `130` | Interrupted with Ctrl-C | `error: scan interrupted` |
 
 Problems in individual skill files are never errors. They show up as warnings on that
@@ -597,6 +772,12 @@ skill (section 4.3).
     contains all of them, with the count `n of total` (section 5.5).
 15. The right pane lists up to 5 similar skills with percentages, computed by the
     deterministic heuristic in section 5.6. Clicking one selects it.
+16. `scan <url> --filter <words>` lists only the matching skills, using the same matches
+    and snippets as the web view (section 5.7).
+17. `scan <url> --skill <name-or-path>` prints the skill's full description, paths,
+    GitHub link, similar skills with bars, and its exact `SKILL.md` (section 5.7).
+18. `browse <url>` shows the filterable list and the selected skill side by side in the
+    terminal, with the keys from section 5.8.
 
 ## 11. Testing
 
@@ -679,6 +860,14 @@ They are meant for tests only.
 | Similar skills: heuristic | Fixed fixture skills give exact scores and order; stopwords, short words and digits are ignored; the top 5 and the 0.05 cutoff apply; the output is identical on every run |
 | Similar skills: API | Each skill's exact `similar` array |
 | Browser: similar skills | The right pane lists similar skills with bars and percentages; clicking one selects it and clears a filter that hid it |
+| CLI filter: shared rules | The Kotlin filter gives the same matches, merged highlight ranges, and snippets as the web view on the same inputs |
+| `scan --filter` | Exact plain output for a match, several words, a snippet, and no match; one scan log line |
+| `scan --skill` | Exact plain output by name and by copy path; similar rows with bars; the exact `SKILL.md`; not found exits `6`; an ambiguous name and `--filter` with `--skill` exit `2` |
+| `scan --filter` / `--skill` in a terminal | Escape codes are present, and the text of the rich view matches section 5.7 |
+| `browse` without a terminal | Exit `2` and the exact message |
+| `browse` state | Unit tests for the three focus areas and every key in section 5.8, selection while filtering, and scrolling |
+| `browse` screen | Mosaic snapshot tests of the rendered frame at a fixed size |
+| `browse` in a pseudo-terminal | Scripted keys (type a filter, move, jump to a similar skill, quit), waiting for markers on screen; exit `0`; one scan log line |
 | `serve --port 0` | Prints the URL. `GET /` returns the page; `/app.js` and `/style.css` return the assets |
 | Web API scan | Exact JSON body; one scan log line; temp directory removed |
 | Web API errors | Invalid URL `400`, unknown repository `404`, missing `url` `400`; exact JSON bodies |
@@ -692,7 +881,7 @@ push to any branch and on every pull request. It runs on `ubuntu-latest` and
 artifact.
 
 The test tools needed are `git`, a JDK, and `python3` (used to run the CLI in a
-pseudo-terminal). All three are preinstalled on GitHub-hosted runners.
+pseudo-terminal and type keys into it). All three are preinstalled on GitHub-hosted runners.
 
 **Browser tests** are part of the integration tests. They drive the real page in
 headless Chromium through Playwright for Java, against a `serve --port 0` process with
