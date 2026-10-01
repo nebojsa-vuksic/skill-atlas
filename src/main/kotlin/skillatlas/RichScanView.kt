@@ -110,6 +110,13 @@ internal fun Report(presentation: Presentation, columns: Int) {
                     SkillListReport(list, descriptionLength)
                 }
                 if (presentation.lists.isNotEmpty()) Text("")
+                for (owner in presentation.owners) {
+                    Row {
+                        Text("Searched ")
+                        Text(sanitize(owner.label), color = Color.Cyan, textStyle = TextStyle.Bold)
+                        Text(owner.counts)
+                    }
+                }
                 Text(presentation.summary, color = Color.Green, textStyle = TextStyle.Bold)
             }
         }

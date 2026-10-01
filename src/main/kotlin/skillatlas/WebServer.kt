@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
@@ -71,7 +72,7 @@ data class ScanResponse(
     }
 }
 
-/** `GET /api/scans`: several repositories scanned together (spec section 5.10). */
+/** `GET /api/scans`: several repositories and owners scanned together (spec sections 5.10 and 5.11). */
 object MultiScanResponse {
     @Serializable
     data class SkillJson(
@@ -97,7 +98,8 @@ object MultiScanResponse {
 
     private val json = Json { encodeDefaults = true }
 
-    fun of(outcomes: List<RepositoryOutcome>): String {
+    fun of(scan: MultiScan): String {
+        val outcomes = scan.reported
         val results = outcomes.filterIsInstance<RepositoryOutcome.Scanned>().map { it.result }
         val similar = crossRepositorySimilarity(results)
         // Built by hand so a scanned repository keeps "description": null while a failed one has only its error.
@@ -105,6 +107,7 @@ object MultiScanResponse {
             for (outcome in outcomes) add(
                 buildJsonObject {
                     put("url", outcome.url)
+                    outcome.from?.let { put("from", it) }
                     when (outcome) {
                         is RepositoryOutcome.Scanned -> {
                             val result = outcome.result
@@ -137,9 +140,31 @@ object MultiScanResponse {
                 )
             }
         }
+        val owners = buildJsonArray {
+            for (owner in scan.owners) add(
+                buildJsonObject {
+                    put("url", owner.url)
+                    put("name", owner.label)
+                    when (owner) {
+                        is OwnerOutcome.Searched -> {
+                            put("type", owner.discovery.owner.type)
+                            put("repository_count", owner.discovery.checked)
+                            put("skipped", owner.discovery.skipped)
+                            put("repositories", buildJsonArray { owner.withSkills.forEach { add(JsonPrimitive(it)) } })
+                            put("summary", owner.line)
+                        }
+                        is OwnerOutcome.Failed -> {
+                            put("error", owner.error.message)
+                            put("exit_code", owner.error.exitCode)
+                        }
+                    }
+                },
+            )
+        }
         val ignored = results.flatMap { result -> result.ignored.map { IgnoredJson(result.repository.fullName, it.path, it.reason) } }
         return buildJsonObject {
             put("repositories", repositories)
+            put("owners", owners)
             put("skills", json.encodeToJsonElement(skills))
             put("ignored", json.encodeToJsonElement(ignored))
         }.toString()
@@ -160,6 +185,9 @@ class WebServer(
     private val warn: (String) -> Unit,
 ) {
     private val cache = ScanCache()
+
+    /** Owners' repository lists, so loading an owner again makes no GitHub request (spec section 5.11). */
+    private val owners = ExpiringCache<OwnerDiscovery>()
 
     private val json = Json { encodeDefaults = true }
 
@@ -232,9 +260,13 @@ class WebServer(
             return sendJson(exchange, 400, json.encodeToString(error))
         }
         val fresh = mutableListOf<ScanResult>()
-        val outcomes = try {
-            MultiScanner(scanner).scanAllWith(urls) { url ->
-                cache.get(url, clock.instant()) ?: scanner.scan(url).also { synchronized(fresh) { fresh += it } }
+        val scan = try {
+            MultiScanner(scanner).scanAllWith(
+                urls,
+                discover = { login -> owners.get(login, clock.instant()) ?: scanner.discoverOwner(login).also { owners.put(login, it, clock.instant()) } },
+            ) { url, listed ->
+                cache.get(url, clock.instant())
+                    ?: (if (listed == null) scanner.scan(url) else scanner.scan(listed)).also { synchronized(fresh) { fresh += it } }
             }
         } catch (e: Exception) {
             val error = ErrorResponse("unexpected failure: ${e.message ?: e.javaClass.name}", ExitCode.INTERNAL_ERROR)
@@ -249,7 +281,7 @@ class WebServer(
                 warn("warning: could not write scan log ${scanLog.file}: ${e.message}")
             }
         }
-        sendJson(exchange, 200, MultiScanResponse.of(outcomes))
+        sendJson(exchange, 200, MultiScanResponse.of(scan))
     }
 
     private fun queryParameters(exchange: HttpExchange, name: String): List<String> =
@@ -304,19 +336,28 @@ class WebServer(
 }
 
 /** Recent scan results for `/api/scans`, so adding a repository doesn't clone the others again (spec section 5.10). */
-class ScanCache(private val ttl: Duration = Duration.ofMinutes(10)) {
-    private class Entry(val result: ScanResult, val at: Instant)
+class ScanCache(ttl: Duration = Duration.ofMinutes(10)) {
+    private val results = ExpiringCache<ScanResult>(ttl)
 
-    private val entries = HashMap<String, Entry>()
-
-    fun get(url: String, now: Instant): ScanResult? = synchronized(entries) {
-        val key = key(url) ?: return null
-        entries[key]?.takeIf { Duration.between(it.at, now) < ttl }?.result
+    fun get(url: String, now: Instant): ScanResult? {
+        val key = runCatching { GitHubUrl.parse(url).toString() }.getOrNull() ?: return null
+        return results.get(key, now)
     }
 
-    fun put(result: ScanResult, now: Instant) = synchronized(entries) {
-        entries[result.repository.fullName.lowercase()] = Entry(result, now)
+    fun put(result: ScanResult, now: Instant) = results.put(result.repository.fullName, result, now)
+}
+
+/** Values that stay fresh for [ttl], keyed ignoring case. */
+class ExpiringCache<T : Any>(private val ttl: Duration = Duration.ofMinutes(10)) {
+    private class Entry<T>(val value: T, val at: Instant)
+
+    private val entries = HashMap<String, Entry<T>>()
+
+    fun get(key: String, now: Instant): T? = synchronized(entries) {
+        entries[key.lowercase()]?.takeIf { Duration.between(it.at, now) < ttl }?.value
     }
 
-    private fun key(url: String) = runCatching { GitHubUrl.parse(url).toString().lowercase() }.getOrNull()
+    fun put(key: String, value: T, now: Instant) = synchronized(entries) {
+        entries[key.lowercase()] = Entry(value, now)
+    }
 }

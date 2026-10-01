@@ -70,10 +70,14 @@ function githubUrl(repository, path) {
     (path === "." ? "" : path + "/");
 }
 
-// "owner/repo" from any accepted URL form, lowercased, to tell whether two URLs are the same repository.
+// "owner/repo", or "owner:<login>" for an organization or user (spec section 5.11), from any accepted URL
+// form, lowercased, to tell whether two URLs name the same thing.
 function repositoryKey(url) {
-  const match = url.trim().replace(/\.git$/i, "").replace(/\/+$/, "")
-    .match(/github\.com[/:]([^/\s]+)\/([^/\s]+)$/i);
+  const trimmed = url.trim().replace(/\.git$/i, "").replace(/\/+$/, "");
+  const owner = trimmed.match(/github\.com\/orgs\/([^/\s]+)(?:\/repositories)?$/i) ||
+    trimmed.match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s]+)$/i);
+  if (owner) return "owner:" + owner[1].toLowerCase();
+  const match = trimmed.match(/github\.com[/:]([^/\s]+)\/([^/\s]+)$/i);
   return match ? (match[1] + "/" + match[2]).toLowerCase() : url.trim().toLowerCase();
 }
 
@@ -99,20 +103,53 @@ function updateLocation() {
 
 // ---- Repository chips ----
 
+function removeButton(name, url) {
+  const remove = element("button", "chip-remove", "×");
+  remove.type = "button";
+  remove.title = "Remove " + name;
+  remove.setAttribute("aria-label", remove.title);
+  remove.addEventListener("click", () => removeRepository(url));
+  return remove;
+}
+
+function repositoryChip(repository) {
+  const chip = element("span", "chip" + (repository.error ? " failed" : ""));
+  chip.dataset.url = repository.url;
+  chip.append(element("span", "chip-name", repository.name || repository.url));
+  chip.append(element("span", "chip-count", repository.error ? "failed" : String(repository.skill_count)));
+  chip.append(removeButton(repository.name || repository.url, repository.url));
+  return chip;
+}
+
+// One chip for a whole organization or user: its repositories with skills, and their skill count (spec section 5.11).
+function ownerChip(owner) {
+  const chip = element("span", "chip owner" + (owner.error ? " failed" : ""));
+  chip.dataset.url = owner.url;
+  chip.append(element("span", "chip-name", owner.name));
+  if (owner.error) {
+    chip.append(element("span", "chip-count", "failed"));
+  } else {
+    const repositories = owner.repositories.length;
+    const skills = current.repositories
+      .filter((repository) => owner.repositories.includes(repository.name))
+      .reduce((total, repository) => total + repository.skill_count, 0);
+    chip.append(element("span", "chip-repos", repositories + (repositories === 1 ? " repo" : " repos")));
+    chip.append(element("span", "chip-count", String(skills)));
+    chip.title = owner.summary;
+  }
+  chip.append(removeButton(owner.name, owner.url));
+  return chip;
+}
+
+// Chips follow the order the URLs were added in. A repository found through an owner has no chip of its own.
 function renderChips() {
-  const chips = (current ? current.repositories : []).map((repository) => {
-    const chip = element("span", "chip" + (repository.error ? " failed" : ""));
-    chip.dataset.url = repository.url;
-    chip.append(element("span", "chip-name", repository.name || repository.url));
-    chip.append(element("span", "chip-count", repository.error ? "failed" : String(repository.skill_count)));
-    const remove = element("button", "chip-remove", "×");
-    remove.type = "button";
-    remove.title = "Remove " + (repository.name || repository.url);
-    remove.setAttribute("aria-label", remove.title);
-    remove.addEventListener("click", () => removeRepository(repository.url));
-    chip.append(remove);
-    return chip;
-  });
+  const chips = !current ? [] : repositoryUrls.map((url) => {
+    const owner = current.owners.find((entry) => entry.url === url);
+    if (owner) return ownerChip(owner);
+    const repository = current.repositories.find((entry) => !entry.from && entry.url === url) ||
+      current.repositories.find((entry) => entry.name && entry.name.toLowerCase() === repositoryKey(url));
+    return repository ? repositoryChip({ ...repository, url }) : null;
+  }).filter(Boolean);
   $("repo-chips").replaceChildren(...chips);
   show($("repo-chips"), chips.length > 0);
 }
@@ -601,24 +638,37 @@ function renderSummaryTable(repositories) {
   $("repo-rows").replaceChildren(...rows);
 }
 
+// The "Searched <owner>: …" line of each owner, or its error, under the summary table (spec section 5.11).
+function renderOwnerLines(owners) {
+  const lines = owners.map((owner) => owner.error
+    ? element("li", "error", "error: " + owner.name + ": " + owner.error)
+    : element("li", "", owner.summary));
+  $("owner-lines").replaceChildren(...lines);
+  show($("owner-lines"), lines.length > 0);
+}
+
 function render(body, preferredSkill, query) {
   const scanned = body.repositories.filter((repository) => !repository.error);
-  const multi = body.repositories.length > 1;
-  current = { repositories: body.repositories, skills: body.skills, ignored: body.ignored, multi, selected: 0, shown: -1, visible: [] };
+  const owners = body.owners || [];
+  // An owner always gets the several-repositories layout, which says what was searched.
+  const multi = body.repositories.length > 1 || owners.length > 0;
+  current = { repositories: body.repositories, owners, skills: body.skills, ignored: body.ignored, multi, selected: 0, shown: -1, visible: [] };
   renderChips();
 
-  // One repository that failed looks exactly like it did before: an error, no result.
-  if (!multi && scanned.length === 0) {
-    $("error").textContent = "error: " + body.repositories[0].error;
+  // One repository or one owner that failed looks exactly like it did before: an error, no result.
+  const failedOwner = owners.length === 1 && owners[0].error && body.repositories.length === 0;
+  if (failedOwner || (!multi && scanned.length === 0)) {
+    $("error").textContent = "error: " + (failedOwner ? owners[0].error : body.repositories[0].error);
     show($("error"), true);
     show($("result"), false);
     return;
   }
 
-  show($("repo-table"), multi);
   show($("repository"), !multi);
+  show($("repo-table"), multi && body.repositories.length > 0);
   if (multi) renderSummaryTable(body.repositories);
   else renderSingleSummary(scanned[0]);
+  renderOwnerLines(owners);
 
   const count = body.skills.length;
   const heading = $("skill-count");

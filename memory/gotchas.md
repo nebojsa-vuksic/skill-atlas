@@ -224,3 +224,31 @@ compositing.
 (`kokoro-v1.0.onnx`, 310 MB, and `voices-v1.0.bin`, 27 MB) come from the kokoro-onnx GitHub
 release. Each line takes about 1.3 s to render once the model is loaded, so load it once
 per demo (`kokoro_say.py` reads JSON on stdin).
+
+## The Air cloud sandbox blocks most build downloads (2026-10-01)
+
+Behind its proxy, foojay, `dl.google.com` and Playwright's CDN are blocked, and there is no
+sudo. What worked, all user-level and uncommitted:
+- **JDK 21:** Temurin from `github.com/adoptium/temurin21-binaries` releases, then
+  `org.gradle.java.installations.paths=<jdk>` in `~/.gradle/gradle.properties`.
+- **Google Maven:** a `~/.gradle/init.d` script that points `google()` at
+  `https://cache-redirector.jetbrains.com/dl.google.com/dl/android/maven2/`.
+- **Chromium:** the matching Chrome Headless Shell zip from
+  `storage.googleapis.com/chrome-for-testing-public/<version>/linux64/`, unpacked into
+  `~/.cache/ms-playwright/chromium_headless_shell-<rev>/` with an `INSTALLATION_COMPLETE` file;
+  its libraries via `apt-get download` + `dpkg-deb -x` into a user dir on `LD_LIBRARY_PATH`.
+- **Fonts:** without any, Chromium crashes (`TargetClosedError`) or lays text out at height 0.
+  Unpack `fonts-dejavu-core` the same way and set `FONTCONFIG_FILE` to a minimal `fonts.conf`.
+- Run `./gradlew build -x installPlaywrightChromium` with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`;
+  that task also wants Playwright's ffmpeg, which is blocked. Every test still runs.
+
+**How to apply:** VHS, ffmpeg and Kokoro aren't available there, so demos are recorded on the
+owner's machine. `gh` only works with the working directory inside a git checkout.
+
+## GitHub lists only a user's public repositories (2026-10-01)
+
+`GET /users/{user}/repos` never returns private repositories, even for the token's own
+account; `/orgs/{org}/repos?type=all` does include the private ones the token can see.
+
+**How to apply:** an owner scan of your own user account misses your private repositories.
+`/user/repos` would cover them; it isn't used yet.

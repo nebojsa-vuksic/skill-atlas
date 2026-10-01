@@ -52,6 +52,19 @@ skill-atlas scan github.com/JetBrains/MPS github.com/JetBrains/koog --filter "re
 takes several URLs at once, groups the skills by repository, and finds similar skills
 across them.
 
+### Whole organizations
+
+```
+GITHUB_TOKEN=$(gh auth token) skill-atlas scan https://github.com/JetBrains
+```
+
+An organization or user URL scans every repository of that owner that has skills. Forks
+and archived repositories are skipped, and each repository's file tree is checked through
+the GitHub API first, so only repositories with a `SKILL.md` are cloned. The report ends
+with a `Searched <owner>: <k> of <n> repositories have skills` line. Owner URLs mix with
+repository URLs, and the web view shows an owner as one chip. It makes about one API
+request per repository, so set `GITHUB_TOKEN`. See spec section 5.11.
+
 ### Demos for pull requests
 
 `demo/record.sh <name>` records the scripted demo in `demo/<name>/` (Playwright for the web

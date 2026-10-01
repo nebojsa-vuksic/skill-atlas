@@ -147,3 +147,28 @@ linked from the README (spec 13.5).
 
 **How to apply:** when a feature changes what users see, update or add a tour demo, record
 it again, and republish with `demo/publish.sh tour …`.
+
+## Owner scans check each repository's tree before cloning (2026-10-01)
+
+An owner URL (`github.com/<org-or-user>`) lists the owner's repositories, skips forks and
+archived ones, and asks `git/trees/<branch>?recursive=1` whether each has a `SKILL.md`. Only
+those, and truncated trees, are cloned (spec 5.11).
+
+**Why:** JetBrains has about 1,100 repositories visible to a token; cloning all of them would
+take most of an hour, while the checks plus 122 clones took 113 s. GitHub code search was
+rejected: it needs a token, allows 10 requests a minute, caps at 1,000 results, and found 6
+anthropics repositories with skills where the trees found 22.
+**How to apply:** a truncated tree or an unexpected tree error means "clone it", never "no
+skills". Only a rate limit fails the owner.
+
+## Owner URLs stay out of the single-repository paths (2026-10-01)
+
+`GitHubUrl.parse` still accepts repositories only; `GitHubUrl.target` adds owners. `Scanner.scan(url)`
+rejects an owner URL with `OwnerUrlNotSupportedException`, which covers `browse`, the shell's
+`/scan` and `/api/scan` at once. An owner's repositories without skills are scanned and
+logged, but `MultiScan.reported` leaves them out of every view.
+
+**Why:** single-repository output and old tests must not change, and a report full of
+"No skills found." sections for monorepos with only fixtures is noise.
+**How to apply:** views use `MultiScan.reported`; the scan log and the web cache use
+`MultiScan.scanned`.

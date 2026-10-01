@@ -15,7 +15,7 @@
     </header>
 
     <form id="scan-form" autocomplete="off">
-      <label for="url">GitHub repositories <span class="hint">(separate several with spaces or commas)</span></label>
+      <label for="url">GitHub repositories or organizations <span class="hint">(separate several with spaces or commas)</span></label>
       <div class="row">
         <input id="url" name="url" type="text" spellcheck="false"
                placeholder="https://github.com/owner/repo">
@@ -32,6 +32,7 @@
         <thead><tr><th>Repository</th><th>Description</th><th>Commit</th><th>Skills</th></tr></thead>
         <tbody id="repo-rows"></tbody>
       </table>
+      <ul id="owner-lines" class="owner-lines" hidden></ul>
 
       <dl id="repository" class="repository">
         <dt>Repository</dt>
