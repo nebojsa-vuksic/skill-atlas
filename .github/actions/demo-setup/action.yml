@@ -41,9 +41,12 @@ runs:
         sudo install "$(find /tmp/vhs -type f -name vhs | head -1)" /usr/local/bin/vhs
         sudo curl -fsSL -o /usr/local/bin/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
         sudo chmod +x /usr/local/bin/ttyd
-        mkdir -p ~/.local/share/fonts
-        cp src/integrationTest/resources/fonts/JetBrainsMono-*.ttf ~/.local/share/fonts/
-        fc-cache -f
+        # System-wide: the demo sandbox moves XDG_DATA_HOME, which hides ~/.local/share/fonts from fontconfig.
+        sudo mkdir -p /usr/local/share/fonts/demo
+        sudo cp src/integrationTest/resources/fonts/JetBrainsMono-*.ttf /usr/local/share/fonts/demo/
+        sudo fc-cache -f
+        XDG_DATA_HOME="$(mktemp -d)" fc-match "JetBrains Mono" | grep -q JetBrainsMono \
+          || { echo "JetBrains Mono is not visible to fontconfig"; exit 1; }
         vhs --version && ttyd --version && ffmpeg -version | head -1
 
     - name: Install headless Chromium and its libraries
