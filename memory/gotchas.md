@@ -140,7 +140,8 @@ with `claude -p --resume <session-id>`. The session ID is in the stream-json log
 Bash 4 features, such as `${var^}`, `mapfile`, and associative arrays, fail in `demo/*.sh`.
 
 **How to apply:** keep scripts to bash 3.2, and use `awk` or `tr` for case changes.
-`stat -f %z` is macOS and `stat -c %s` is Linux, so the demo scripts try both.
+`stat -f %z` is macOS and `stat -c %s` is Linux. Try `stat -c %s` first: GNU `stat -f` means
+"filesystem status" and succeeds with the wrong output, which broke `record.sh` on Linux.
 
 ## An exact JSON test must change when the page switches APIs (2026-09-30)
 

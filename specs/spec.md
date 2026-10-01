@@ -1413,6 +1413,8 @@ Everything lives in `demo/`:
 - `demo/record.sh <name>` builds the distribution (`./gradlew installDist`). It starts
   `skill-atlas serve` on a free port, runs the recording scripts for `<name>`, and stops
   the server again, including when a step fails. The results go to `build/demo/<name>/`.
+  The scan log and the stars file (section 5.11) point into temporary directories, so a
+  demo never changes yours.
 - `demo/<name>/web.mjs` is a Playwright script: it opens the web view, types, clicks, and
   pauses on each result long enough to read it (about 1.5 s).
 - `demo/<name>/terminal.tape` is a VHS script. It records at 1400×820 px, with the font at
