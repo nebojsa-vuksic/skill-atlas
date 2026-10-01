@@ -249,3 +249,12 @@ The Update screenshots workflow commits baselines and then must start CI itself.
 
 **How to apply:** use `gh workflow run ci.yml --ref <branch>`, which needs
 `permissions: actions: write`. `ci.yml` has `workflow_dispatch` for this.
+
+## "No space left on device" from ffmpeg 6.x is not about disk (2026-10-01)
+
+On Ubuntu's ffmpeg 6.1, `amix,apad` with `-shortest` failed with `Error while filtering: No
+space left on device` while 30 GB were free. ffmpeg 9 on the Mac was fine. We first freed
+disk space, which didn't help.
+
+**How to apply:** pad audio to an explicit length (`apad=whole_dur=<s>`) and cut with
+`-t <s>`, never `-shortest`. Check `df -h` before blaming the disk.
