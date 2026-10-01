@@ -25,6 +25,7 @@ branch, so viewing them needs access to this private repository.
 | [tour-cli](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-cli/terminal.mp4) | `scan` rich and plain, merged copies, fixtures, `--filter`, `--skill`, several repositories | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-cli/terminal.gif?raw=true) |
 | [tour-browse](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-browse/terminal.mp4) | `browse`: moving, the live filter, similar skills, quitting | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-browse/terminal.gif?raw=true) |
 | [tour-shell](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-shell/terminal.mp4) | The shell: the palette, Tab completion, `/scan`, `/filter`, `/skill`, `/log` | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-shell/terminal.gif?raw=true) |
+| [tour-stars](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/pr-18/web.mp4) | Starring skills: the star button, `s`, the starred-only filter, stars kept after a reload | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/pr-18/web.gif?raw=true) |
 
 ## Requirements
 
