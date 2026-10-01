@@ -65,7 +65,11 @@ jobs:
 
       - name: Narrate and encode the videos
         if: always()
-        run: demo/finish-all.sh
+        run: |
+          # VHS leaves its frame files behind; they're not needed once the .webm exists.
+          rm -rf /tmp/vhs* 2>/dev/null || true
+          df -h /
+          demo/finish-all.sh
 
       - name: Upload the demos, screenshots and any diffs
         if: always()

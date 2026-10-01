@@ -7,6 +7,13 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Free disk space
+      # VHS keeps every frame as a PNG while recording; the runner's preinstalled SDKs leave too little room.
+      shell: bash
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        df -h /
+
     - uses: actions/setup-java@v4
       with:
         distribution: temurin
