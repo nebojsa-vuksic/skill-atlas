@@ -320,3 +320,23 @@ fonts and libraries would change every screenshot at once.
 **How to apply:** the Demos job and Update screenshots use `ubuntu-24.04`. Moving to a new
 image is a separate PR: change both `runs-on` lines, run Update screenshots, and review the
 diffs.
+
+## Terminal demos used a fallback font on CI (2026-10-01)
+
+Every terminal baseline had widely spaced letters: JetBrains Mono was installed in
+`~/.local/share/fonts`, but the demo sandbox sets `XDG_DATA_HOME` to a temporary directory, so
+fontconfig never looked there. The baselines matched anyway, because the fallback was
+deterministic.
+
+**How to apply:** demo fonts go in `/usr/local/share/fonts`, and demo setup fails if
+`fc-match` can't find them with `XDG_DATA_HOME` moved. A screenshot can match its baseline and
+still be wrong, so look at new baselines before accepting them.
+
+## Update screenshots commits wait for approval on the PR (2026-10-01)
+
+Its commit is pushed by `github-actions[bot]`, so the `pull_request` run on it stops as
+`action_required`. The `workflow_dispatch` run it starts runs normally.
+
+**How to apply:** after reviewing the new baselines, approve the held run with
+`gh api -X POST repos/<repo>/actions/runs/<id>/approve`. The DoD needs that `pull_request` run
+green.
