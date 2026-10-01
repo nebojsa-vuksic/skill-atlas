@@ -1,0 +1,63 @@
+name: Demo setup
+description: Pinned tools for the demo tests (spec section 13.1) - Java, VHS, ttyd, ffmpeg, fonts, Chromium.
+inputs:
+  voice:
+    description: Also set up the Kokoro narration voice
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Free disk space
+      # VHS keeps every frame as a PNG while recording; the runner's preinstalled SDKs leave too little room.
+      shell: bash
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        df -h /
+
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: 21
+
+    - uses: gradle/actions/setup-gradle@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'demo/package-lock.json') }}
+
+    - name: Install VHS, ttyd and ffmpeg (pinned) and the demo fonts
+      shell: bash
+      run: |
+        sudo apt-get update -q
+        sudo apt-get install -y -q ffmpeg fontconfig
+        curl -fsSL -o /tmp/vhs.tgz https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Linux_x86_64.tar.gz
+        mkdir -p /tmp/vhs && tar -xzf /tmp/vhs.tgz -C /tmp/vhs
+        sudo install "$(find /tmp/vhs -type f -name vhs | head -1)" /usr/local/bin/vhs
+        sudo curl -fsSL -o /usr/local/bin/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
+        sudo chmod +x /usr/local/bin/ttyd
+        mkdir -p ~/.local/share/fonts
+        cp src/integrationTest/resources/fonts/JetBrainsMono-*.ttf ~/.local/share/fonts/
+        fc-cache -f
+        vhs --version && ttyd --version && ffmpeg -version | head -1
+
+    - name: Install headless Chromium and its libraries
+      shell: bash
+      run: ./gradlew installPlaywrightChromium --no-daemon -PplaywrightWithDeps
+
+    - name: Cache the Kokoro voice
+      if: inputs.voice == 'true'
+      uses: actions/cache@v4
+      with:
+        path: demo/.kokoro
+        key: kokoro-v1.0
+
+    - name: Set up the Kokoro voice
+      if: inputs.voice == 'true'
+      shell: bash
+      run: demo/setup-voice.sh
