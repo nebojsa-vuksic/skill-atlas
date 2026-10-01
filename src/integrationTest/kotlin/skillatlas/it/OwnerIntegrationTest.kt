@@ -150,6 +150,25 @@ class OwnerIntegrationTest {
     }
 
     @Test
+    fun `stars show on skills found through an owner, and is starred filters across it`() {
+        sandbox.api.repository("acme/one", "Acme tools")
+        assertEquals(0, sandbox.run("star", "github.com/acme/one", "commits").exitCode)
+
+        val run = sandbox.run("scan", "github.com/acme", "--filter", "is:starred")
+
+        assertEquals(0, run.exitCode, run.toString())
+        assertEquals(listOf("acme/Big", "acme/one", "acme/two"), repositoriesIn(run.stdout))
+        assertTrue("\n  commits  [starred]\n    How to write commit messages.\n    skills/commits\n" in run.stdout, run.stdout)
+        assertTrue(
+            run.stdout.endsWith(
+                "Searched acme: 3 of 6 repositories have skills (2 forks or archived skipped)\n" +
+                    "Scanned 3 repositories: 1 of 4 skills match \"is:starred\"\n",
+            ),
+            run.stdout,
+        )
+    }
+
+    @Test
     fun `scan of a user lists the user's own repositories`() {
         sandbox.api.owner("jane", listOf(StubGitHubApi.Listed("notes", "Jane's notes")), type = "User")
         val notes = repository("jane/notes", mapOf("SKILL.md" to skill("notes", "Take notes.")))
@@ -284,6 +303,10 @@ class OwnerIntegrationTest {
         val browse = sandbox.runInTerminal("browse", "github.com/acme")
         assertEquals(2, browse.exitCode, browse.toString())
         assertTrue("error: $message" in stripEscapeCodes(browse.stdout), browse.stdout)
+
+        val star = sandbox.run("star", "github.com/acme", "pdf-extract")
+        assertEquals(2, star.exitCode, star.toString())
+        assertTrue(star.stderr.endsWith("error: $message\n"), star.stderr)
 
         sandbox.startWebView().use { web ->
             val response = web.get("/api/scan?url=github.com/acme")
