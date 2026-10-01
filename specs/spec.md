@@ -1289,11 +1289,11 @@ Scanned 3 repositories: 4 skills
 
 #### Commands that work on one repository
 
-`browse`, the shell's `/scan` and `GET /api/scan` take one repository. Given an owner URL,
-they fail with the message
+`browse`, `star`, `unstar`, the shell's `/scan` and `GET /api/scan` take one repository.
+Given an owner URL, they fail with the message
 `<url> names an organization or user, not a repository; use "skill-atlas scan <url>" to search its repositories`:
-`browse` exits `2`, the shell prints it inline in red and keeps running, and `/api/scan`
-answers `400` with `exit_code: 2`.
+`browse`, `star` and `unstar` exit `2`, the shell prints it inline in red and keeps running,
+and `/api/scan` answers `400` with `exit_code: 2`.
 
 The implementation plan for this section is in
 [`specs/plans/organization-scan.md`](plans/organization-scan.md).
@@ -1420,8 +1420,8 @@ skill (section 4.3).
     scanned once however often it is given, and an unknown owner doesn't hide the others.
 30. The web view shows an owner as one chip; removing it removes its repositories. Within
     10 minutes the same owner loads again without a GitHub request or a clone.
-31. `browse`, the shell's `/scan` and `GET /api/scan` reject an owner URL with the message
-    of section 5.12.
+31. `browse`, `star`, `unstar`, the shell's `/scan` and `GET /api/scan` reject an owner URL
+    with the message of section 5.12.
 
 ## 11. Testing
 
@@ -1552,8 +1552,9 @@ were checked and that a cached request made none.
 | Owner with many repositories | 101 repositories over two pages; page 2 is requested and page 3 isn't |
 | Owner mixed with repositories | Order, a repository given directly and through the owner scanned once and counted in `<k>`, similar skills across them |
 | Owner failures | Unknown owner exits `3` with the others still reported; rate limited while checking exits `5` |
+| Owner with stars | A skill starred in a repository shows `[starred]` when it comes through its owner, and `is:starred` filters across the owner's repositories |
 | Owner in a terminal | Escape codes are present, and the `Searched` line and summary match section 5.12 |
-| Owner URL in single-repository commands | `browse` exits `2`, the shell prints the error inline, `/api/scan` answers `400`; exact messages |
+| Owner URL in single-repository commands | `browse` and `star` exit `2`, the shell prints the error inline, `/api/scan` answers `400`; exact messages |
 | Web API owners | Exact `owners` JSON and `from` fields; an unknown owner in its row with `200`; a second request makes no GitHub request and adds no scan log line |
 | Browser: owners | An owner URL gives one owner chip, its repositories in the table and grouped list, and the `Searched` line; removing the chip drops them; the URL restores the owner |
 
