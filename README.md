@@ -8,6 +8,7 @@ the repository's name, description, and the commit that was scanned. See
 skill-atlas                              # in a terminal: the interactive shell
 skill-atlas scan <github-project-url>
 skill-atlas serve [--port <port>]
+skill-atlas star <github-project-url> <skill>    # mark a favourite; unstar removes it, stars lists them
 ```
 
 ## Demos
@@ -24,6 +25,7 @@ branch, so viewing them needs access to this private repository.
 | [tour-cli](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-cli/terminal.mp4) | `scan` rich and plain, merged copies, fixtures, `--filter`, `--skill`, several repositories | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-cli/terminal.gif?raw=true) |
 | [tour-browse](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-browse/terminal.mp4) | `browse`: moving, the live filter, similar skills, quitting | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-browse/terminal.gif?raw=true) |
 | [tour-shell](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-shell/terminal.mp4) | The shell: the palette, Tab completion, `/scan`, `/filter`, `/skill`, `/log` | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-shell/terminal.gif?raw=true) |
+| [tour-stars](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/pr-18/web.mp4) | Starring skills: the star button, `s`, the starred-only filter, stars kept after a reload | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/pr-18/web.gif?raw=true) |
 
 ## Requirements
 
@@ -67,8 +69,22 @@ skill-atlas scan <url> --skill mps-tests       # one skill: description, paths, 
 skill-atlas browse <url>                       # full-screen list + details in the terminal
 ```
 
-In `browse`: ↑/↓ select, `/` filter, Tab to jump into similar skills, PgUp/PgDn scroll,
-Esc clear the filter, `q` quit.
+In `browse`: ↑/↓ select, `/` filter, `s` star, Tab to jump into similar skills, PgUp/PgDn
+scroll, Esc clear the filter, `q` quit.
+
+### Starred skills
+
+```
+skill-atlas star <url> mps-tests               # star a skill (found like --skill)
+skill-atlas unstar <url> mps-tests             # remove the star
+skill-atlas stars                              # list every starred skill, without scanning
+skill-atlas scan <url> --filter is:starred     # only the starred skills; [starred] tags them everywhere
+```
+
+Stars are favourites, kept in `$XDG_DATA_HOME/skill-atlas/stars.json` (default
+`~/.local/share/skill-atlas/stars.json`) and shared by every view: `s` in `browse`, `/star`,
+`/unstar` and `/stars` in the shell, and the star button, the `s` key and the `★`
+starred-only filter in the web view.
 
 ### Interactive shell
 
@@ -84,6 +100,7 @@ palette: it filters as you type, ↑/↓ select, Tab completes, Enter runs, Esc 
 /filter pdf                                   # like scan --filter (or just type: pdf)
 /skill docx                                   # like scan --skill; Tab after "/skill " completes names
 /similar docx                                 # only the similar-skills table
+/star docx  /unstar docx  /stars              # star a skill, remove its star, list the stars
 /browse                                       # the full-screen browse view; q comes back
 /repo  /log  /serve [port]  /serve stop  /help  /quit
 ```
@@ -102,7 +119,7 @@ This serves a local page on top of the same scanner. Skills are listed on the le
 click one, or use ↑/↓, to see its full description and `SKILL.md` content on the right.
 Drag the divider to resize the panes. Open the printed URL, or link
 straight to a scan with `http://127.0.0.1:8421/?url=https://github.com/anthropics/skills`.
-The JSON API is `GET /api/scan?url=<repository-url>`.
+The JSON API is `GET /api/scan?url=<repository-url>`, and `POST /api/star` stars a skill.
 
 `./gradlew distZip` builds a distributable archive in `build/distributions/`.
 

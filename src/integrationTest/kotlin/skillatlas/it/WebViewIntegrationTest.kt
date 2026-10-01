@@ -66,11 +66,11 @@ class WebViewIntegrationTest {
             """{"repository":{"name":"acme/skills","description":"Acme agent skills","branch":"main","commit":"$commit"},""" +
                 """"skills":[""" +
                 """{"name":"csv-tools","description":"","short_description":"","path":"skills/csv",""" +
-                """"also_at":[],"shipped":false,"warnings":["missing description"],""" +
+                """"also_at":[],"shipped":false,"starred":false,"warnings":["missing description"],""" +
                 """"content":"---\nname: csv-tools\n---\n","content_html":"","similar":[]},""" +
                 """{"name":"pdf-extract","description":"Extract text and tables from PDF files.",""" +
                 """"short_description":"Extract text and tables from PDF files.","path":"skills/pdf",""" +
-                """"also_at":[],"shipped":false,"warnings":[],""" +
+                """"also_at":[],"shipped":false,"starred":false,"warnings":[],""" +
                 """"content":"---\nname: pdf-extract\ndescription: Extract text and tables from PDF files.\n---\n\n# PDF\n\nUse `pdftotext`.\n",""" +
                 """"content_html":"<h1>PDF</h1>\n<p>Use <code>pdftotext</code>.</p>\n","similar":[]}],"ignored":[]}""",
             response.body,

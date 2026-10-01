@@ -50,10 +50,10 @@ class ShellScreenTest {
               /filter <words>          List the skills whose name or description has every word
               /skill <name-or-path>    Show one skill: description, paths, similar skills, SKILL.md
               /similar <name-or-path>  Show the skills most similar to one skill
+              /star <name-or-path>     Star a skill of the current repository
+              /unstar <name-or-path>   Remove a skill's star
+              /stars                   List every starred skill
               /browse                  Browse the current repository full-screen; q returns here
-              /repo                    Show the current repository
-              /serve [port]            Start the web view in the background; /serve stop stops it
-              /log                     Show the last 10 scans from the scan log
             """.trimIndent().lines().joinToString("\n") { it.trimEnd() },
             snapshot(state),
         )
@@ -86,10 +86,10 @@ class ShellScreenTest {
         state.type("/")
         assertEquals(1 + 8, ShellScreen.render(state, 100).size)
 
-        repeat(9) { state.onKey("ArrowDown") }
+        repeat(ShellCommands.ALL.size) { state.onKey("ArrowDown") }
         val lines = ShellScreen.render(state, 100).map { it.text.trimEnd() }
         assertEquals(9, lines.size)
-        assertTrue(lines[1].startsWith("  /skill"), lines[1])
+        assertTrue(lines[1].startsWith("  /unstar"), lines[1])
         assertTrue(lines[8].startsWith("▸ /quit"), lines[8])
 
         assertEquals(0 until 8, ShellScreen.window(10, 0))

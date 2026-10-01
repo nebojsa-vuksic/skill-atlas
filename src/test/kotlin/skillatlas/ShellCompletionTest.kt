@@ -50,8 +50,8 @@ class ShellCompletionTest {
     fun `a slash alone lists every command in registry order`() {
         assertEquals(
             listOf(
-                "/scan <url>", "/filter <words>", "/skill <name-or-path>", "/similar <name-or-path>", "/browse",
-                "/repo", "/serve [port]", "/log", "/help", "/quit",
+                "/scan <url>", "/filter <words>", "/skill <name-or-path>", "/similar <name-or-path>",
+                "/star <name-or-path>", "/unstar <name-or-path>", "/stars", "/browse", "/repo", "/serve [port]", "/log", "/help", "/quit",
             ),
             labels("/"),
         )
@@ -59,7 +59,13 @@ class ShellCompletionTest {
 
     @Test
     fun `commands are filtered as you type`() {
-        assertEquals(listOf("/scan <url>", "/skill <name-or-path>", "/similar <name-or-path>", "/serve [port]", "/browse"), labels("/s"))
+        assertEquals(
+            listOf(
+                "/scan <url>", "/skill <name-or-path>", "/similar <name-or-path>", "/star <name-or-path>", "/stars", "/serve [port]",
+                "/unstar <name-or-path>", "/browse",
+            ),
+            labels("/s"),
+        )
         assertEquals(listOf("/scan <url>"), labels("/SC"))
         // "il" only occurs inside names, so these are substring matches.
         assertEquals(listOf("/filter <words>", "/skill <name-or-path>", "/similar <name-or-path>"), labels("/il"))
@@ -89,6 +95,13 @@ class ShellCompletionTest {
         assertEquals(listOf("pdf", "pdf-extract"), labels("/skill pdf", skills))
         assertEquals(listOf("docx"), labels("/similar DOCX", skills))
         assertEquals(listOf("pdf", "pdf-extract"), labels("/SKILL   pdf", skills))
+    }
+
+    @Test
+    fun `star and unstar suggest skills too`() {
+        assertEquals(listOf("pdf", "pdf-extract"), labels("/star pdf", skills))
+        assertEquals("/unstar docx", (ShellCompletion.suggest("/unstar DOCX", skills).single() as PaletteItem.SkillArgument).completion)
+        assertEquals(emptyList(), labels("/stars ", skills))
     }
 
     @Test
