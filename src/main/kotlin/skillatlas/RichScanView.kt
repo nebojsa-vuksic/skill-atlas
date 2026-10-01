@@ -81,6 +81,17 @@ internal fun Report(result: ScanResult, columns: Int) = Report(Presentation.Skil
 
 @Composable
 internal fun Report(presentation: Presentation, columns: Int) {
+    when (presentation) {
+        // Star changes and the star list are short answers, without the title (spec section 5.11).
+        is Presentation.StarChanged -> StarChangedLine(presentation)
+        is Presentation.StarList -> StarListReport(presentation)
+        else -> ScanReport(presentation, columns)
+    }
+}
+
+/** The title, then the scanned repositories and their skills. */
+@Composable
+private fun ScanReport(presentation: Presentation, columns: Int) {
     // One column of padding plus a two-column skill indent, and one spare so lines never wrap.
     // Terminals that report no size get the full limit.
     val descriptionLength =
@@ -111,6 +122,43 @@ internal fun Report(presentation: Presentation, columns: Int) {
                 }
                 if (presentation.lists.isNotEmpty()) Text("")
                 Text(presentation.summary, color = Color.Green, textStyle = TextStyle.Bold)
+            }
+            // Shown by Report without the title.
+            is Presentation.StarChanged, is Presentation.StarList -> Unit
+        }
+    }
+}
+
+/** `★ Starred <name> (<id>).` and the other outcomes of `star` and `unstar` (spec section 5.11). */
+@Composable
+internal fun StarChangedLine(change: Presentation.StarChanged) {
+    Row(modifier = Modifier.padding(horizontal = 1)) {
+        if (change.starred) Text("★ ", color = Color.Yellow, textStyle = TextStyle.Bold) else Text("☆ ", textStyle = TextStyle.Dim)
+        Text(change.before)
+        Text(sanitize(change.skill.name), color = Color.Cyan, textStyle = TextStyle.Bold)
+        Text(change.after)
+        Text(sanitize(change.id), textStyle = TextStyle.Dim)
+        Text(").")
+    }
+}
+
+/** The starred skills: a count line, then one row per star (spec section 5.11). */
+@Composable
+internal fun StarListReport(list: Presentation.StarList) {
+    Column(modifier = Modifier.padding(horizontal = 1)) {
+        if (list.stars.isEmpty()) {
+            Text(list.heading, color = Color.Yellow)
+        } else {
+            Text(list.heading, color = Color.Green, textStyle = TextStyle.Bold)
+            Text("")
+            val width = list.stars.maxOf { sanitize(it.name).length }
+            for (star in list.stars) {
+                Row {
+                    Text("★ ", color = Color.Yellow, textStyle = TextStyle.Bold)
+                    Text(sanitize(star.name).padEnd(width), color = Color.Cyan, textStyle = TextStyle.Bold)
+                    Text("  ")
+                    Text(sanitize(star.id), textStyle = TextStyle.Dim)
+                }
             }
         }
     }
@@ -266,6 +314,9 @@ internal fun Highlighted(text: String, words: List<String>, color: Color = Color
 
 @Composable
 private fun Tags(skill: Skill) {
+    if (skill.starred) {
+        Text("  ★ $STARRED_LABEL", color = Color.Yellow, textStyle = TextStyle.Bold)
+    }
     if (skill.shipped) {
         Text("  ◆ $SHIPPED_LABEL", color = Color.Magenta)
     }

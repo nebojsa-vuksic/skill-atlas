@@ -744,8 +744,8 @@ with Mosaic, and it uses the same core and the same rich renderers as `scan` (se
   /star <name-or-path>     Star a skill of the current repository
   /stars                   List every starred skill
   /serve [port]            Start the web view in the background; /serve stop stops it
-  /browse                  Browse the current repository full-screen; q returns here
   /unstar <name-or-path>   Remove a skill's star
+  /browse                  Browse the current repository full-screen; q returns here
 ```
 
 **Prompt.** A bold cyan `❯ `, then the input with a block cursor (inverted). While the

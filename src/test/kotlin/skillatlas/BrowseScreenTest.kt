@@ -50,7 +50,7 @@ class BrowseScreenTest {
                 "                                │",
                 "                                │   - indented item that is long enough to wrap",
                 "                                │   around",
-                " ↑↓ select  / filter  tab similar  pgup/pgdn scroll  esc clear  q quit",
+                " ↑↓ select  / filter  s star  tab similar  pgup/pgdn scroll  esc clear  q quit",
             ),
             lines.map { it.trimEnd() },
         )
@@ -115,5 +115,22 @@ class BrowseScreenTest {
         assertEquals("abc…", BrowseScreen.fit(listOf(Span("abcdef")), 4).text)
         assertEquals("ab  ", BrowseScreen.fit(listOf(Span("ab")), 4).text)
         assertEquals(listOf("one two", "three", "abcde", "fgh"), BrowseScreen.wrap("one two three abcdefgh", 7).let { it.take(2) + BrowseScreen.wrap("abcdefgh", 5) })
+    }
+
+    @Test
+    fun `marks starred skills and shows a notice in place of the key help`() {
+        val starred = result.copy(skills = skills.map { it.copy(starred = it.name == "mps-tests") })
+        val state = BrowseState(starred, similar, notice = Span("error: could not save stars /x: permission denied", Look.ERROR))
+        val frame = BrowseScreen.render(state, 80, 20)
+        val lines = frame.lines.map { it.text.trimEnd() }
+
+        assertEquals("▌mps-tests               ★ ◆ ⧉1 │ models.", lines[3])
+        assertEquals(" / filter                2 of 2 │ mps-tests  ★ starred  ◆ shipped in product", lines[1])
+        assertEquals(Span("★", Look.STAR), frame.lines[3].first { it.text == "★" })
+        assertEquals(" error: could not save stars /x: permission denied", lines.last())
+        assertEquals(Look.ERROR, frame.lines.last().first().look)
+
+        state.onKey("ArrowDown")
+        assertTrue(BrowseScreen.render(state, 80, 20).lines.last().text.startsWith(" ↑↓ select  / filter  s star"))
     }
 }

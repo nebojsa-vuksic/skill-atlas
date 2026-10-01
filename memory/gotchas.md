@@ -224,3 +224,29 @@ compositing.
 (`kokoro-v1.0.onnx`, 310 MB, and `voices-v1.0.bin`, 27 MB) come from the kokoro-onnx GitHub
 release. Each line takes about 1.3 s to render once the model is loaded, so load it once
 per demo (`kokoro_say.py` reads JSON on stdin).
+
+## The JetBrains Air Linux sandbox blocks most downloads (2026-10-01)
+
+Only Java 25 is installed; foojay, `dl.google.com` (Mosaic's AndroidX) and Playwright's CDN
+return "403 Blocked by network policy", and there's no sudo. What worked, all outside the repo:
+- Temurin 21 from its GitHub release into `~/.local/jdks`, named in `~/.gradle/gradle.properties`
+  as `org.gradle.java.installations.paths`.
+- `~/.gradle/init.d/google-mirror.gradle` points `dl.google.com` repositories at
+  `https://cache-redirector.jetbrains.com/dl.google.com/dl/android/maven2/`.
+- Chrome headless shell from `storage.googleapis.com/chrome-for-testing-public/<version>/`
+  into `~/.cache/ms-playwright/chromium_headless_shell-<rev>/` with an `INSTALLATION_COMPLETE`
+  file, and BtbN's static FFmpeg from GitHub as `ffmpeg-<rev>/ffmpeg-linux`.
+- Chromium's libraries and fonts via `apt-get download` with `-o Dir::State=/tmp/apt/state`,
+  unpacked with `dpkg -x` into `~/.local/chromium-libs`; run Gradle with `LD_LIBRARY_PATH` and
+  `FONTCONFIG_FILE` set.
+
+**Why:** without fonts, 12 browser tests failed on an untouched `main` with zero-height text.
+**How to apply:** if browser tests fail with `height=0` or timeouts, check fonts before code.
+
+## The 500-skill similarity timing test fails under IDE load (2026-10-01)
+
+It took 1.31 s once in a full `./gradlew test` while the IDE's analyzer used about two cores,
+and passed three times in a row alone.
+
+**How to apply:** check `uptime` and rerun on a quiet machine; never raise the limit.
+

@@ -65,6 +65,10 @@ class AmbiguousSkillException(selector: String, paths: List<String>) :
         ExitCode.USAGE,
     )
 
+/** The stars file can't be read or saved (spec section 5.11). */
+class StarsFileException(message: String, cause: Throwable? = null) :
+    SkillAtlasException(message, ExitCode.INTERNAL_ERROR, cause)
+
 class NotATerminalException(command: String) :
     SkillAtlasException("$command needs an interactive terminal; use \"skill-atlas scan\" instead", ExitCode.USAGE)
 

@@ -26,9 +26,10 @@ import kotlinx.coroutines.runInterruptible
 
 /**
  * `skill-atlas browse`: the scan's status line, then the interactive split view until the
- * user quits (spec section 5.8). [onScanned] runs once the scan has succeeded.
+ * user quits (spec section 5.8). [onScanned] runs once the scan has succeeded, and `s`
+ * changes [stars] (spec section 5.11).
  */
-class BrowseView(private val onScanned: (ScanResult) -> Unit) {
+class BrowseView(private val stars: StarStore, private val onScanned: (ScanResult) -> Unit) {
     fun run(scan: (progress: (String) -> Unit) -> ScanResult) {
         var outcome: Result<ScanResult>? = null
         try {
@@ -41,14 +42,16 @@ class BrowseView(private val onScanned: (ScanResult) -> Unit) {
                     val attempt = runCatching {
                         runInterruptible(Dispatchers.IO) {
                             val result = scan { status = it.removeSuffix("...") }
-                            result to SkillSimilarity.compute(result.skills, result.contents)
+                            var warning: Span? = null
+                            val starred = result.withStars(stars.readOrWarn { warning = Span(it, Look.WARNING) })
+                            Triple(starred, SkillSimilarity.compute(result.skills, result.contents), warning)
                         }
                     }
                     currentCoroutineContext().ensureActive()
                     outcome = attempt.map { it.first }
-                    attempt.onSuccess { (result, similar) ->
+                    attempt.onSuccess { (result, similar, warning) ->
                         onScanned(result)
-                        state = BrowseState(result, similar)
+                        state = BrowseState(result, similar, stars, warning)
                     }
                     finished = true
                 }
@@ -107,5 +110,6 @@ internal fun LookText(span: Span) {
         Look.BAR -> Text(span.text, color = Color.Cyan)
         Look.CURSOR -> Text(span.text, textStyle = TextStyle.Invert)
         Look.ERROR -> Text(span.text, color = Color.Red)
+        Look.STAR -> Text(span.text, color = Color.Yellow, textStyle = TextStyle.Bold)
     }
 }

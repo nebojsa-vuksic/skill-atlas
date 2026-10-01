@@ -31,6 +31,7 @@ class SkillAtlasCliTest {
     private lateinit var origin: Path
     private lateinit var tempRoot: Path
     private lateinit var logFile: Path
+    private val starsFile: Path get() = dir.resolve("data/skill-atlas/stars.json")
 
     private data class ApiResponse(val status: Int, val body: String, val headers: Map<String, String> = emptyMap())
 
@@ -101,7 +102,7 @@ class SkillAtlasCliTest {
         )
         val out = PrintStream(stdout, true)
         val clock = Clock.fixed(Instant.parse("2026-09-30T10:28:00Z"), ZoneOffset.UTC)
-        val cli = SkillAtlasCli(scanner, ScanLog(logPath), PlainScanView(out, err), out, err, clock, interactive, shellView)
+        val cli = SkillAtlasCli(scanner, ScanLog(logPath), StarStore(starsFile), PlainScanView(out, err), out, err, clock, interactive, shellView)
         val exitCode = cli.run(args.toList())
         return Run(exitCode, stdout.toString(), stderr.toString())
     }
