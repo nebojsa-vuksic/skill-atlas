@@ -58,10 +58,17 @@ sealed interface Presentation {
             get() = if (stars.isEmpty()) "No starred skills yet." else "${stars.size} starred ${if (stars.size == 1) "skill" else "skills"}"
     }
 
-    /** Several repositories: one list per scanned repository, in URL order (spec section 5.10). */
-    data class MultiList(val outcomes: List<RepositoryOutcome>, val query: String? = null) : Presentation {
-        val lists: List<SkillList> = outcomes.filterIsInstance<RepositoryOutcome.Scanned>().map { SkillList(it.result, query) }
+    /**
+     * Several repositories: one list per reported repository, in URL order (spec section 5.10), then
+     * the `Searched` line of each owner (spec section 5.12).
+     */
+    data class MultiList(val scan: MultiScan, val query: String? = null) : Presentation {
+        constructor(outcomes: List<RepositoryOutcome>, query: String? = null) : this(MultiScan(outcomes), query)
+
+        val lists: List<SkillList> = scan.reported.filterIsInstance<RepositoryOutcome.Scanned>().map { SkillList(it.result, query) }
         override val results: List<ScanResult> get() = lists.map { it.result }
+
+        val owners: List<OwnerOutcome.Searched> get() = scan.owners.filterIsInstance<OwnerOutcome.Searched>()
 
         /** e.g. `Scanned 2 repositories: 5 of 44 skills match "test", 1 failed`. */
         val summary: String
@@ -72,7 +79,7 @@ sealed interface Presentation {
                 } else {
                     "${lists.sumOf { it.skills.size }} of $total skills match \"${sanitize(query)}\""
                 }
-                val failed = outcomes.count { it is RepositoryOutcome.Failed }
+                val failed = scan.failures.size
                 val repositories = if (lists.size == 1) "repository" else "repositories"
                 return "Scanned ${lists.size} $repositories: $counts" + if (failed > 0) ", $failed failed" else ""
             }

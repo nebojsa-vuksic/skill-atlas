@@ -505,6 +505,11 @@ button:disabled { opacity: 0.6; cursor: progress; }
 .chip-name { font-weight: 600; }
 .chip-count { color: var(--muted); font-size: 12px; }
 
+/* An organization or user (spec section 5.12): a dashed accent border, and how many of its repositories have skills. */
+.chip.owner { border-style: dashed; border-color: var(--accent); }
+.chip.owner.failed { border-color: var(--error); }
+.chip-repos { color: var(--muted); font-size: 12px; }
+
 .chip-remove {
   padding: 0 6px;
   border-radius: 999px;
@@ -531,6 +536,10 @@ button:disabled { opacity: 0.6; cursor: progress; }
 .repo-table tr:last-child td { border-bottom: 0; }
 .repo-table .count { text-align: right; font-variant-numeric: tabular-nums; }
 .repo-table .error-cell { color: var(--error); }
+
+.owner-lines { margin: 8px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
+.owner-lines li { margin: 2px 0; }
+.owner-lines .error { margin: 0; color: var(--error); }
 
 .group-header {
   position: sticky;

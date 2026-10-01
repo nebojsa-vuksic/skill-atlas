@@ -37,13 +37,13 @@ class MultiRepositoryTest {
         val scanned = Collections.synchronizedList(mutableListOf<String>())
         val outcomes = scanner().scanAllWith(
             listOf("github.com/acme/one", "https://gitlab.com/x/y", "https://github.com/acme/two.git", "git@github.com:acme/one.git"),
-        ) { url ->
+        ) { url, _ ->
             scanned += url
             when (GitHubUrl.parse(url).toString()) {
                 "acme/one" -> one
                 else -> throw RepositoryNotFoundException(GitHubUrl.parse(url))
             }
-        }
+        }.repositories
 
         assertEquals(listOf("acme/one", "https://gitlab.com/x/y", "acme/two"), outcomes.map { it.label })
         assertIs<RepositoryOutcome.Scanned>(outcomes[0])
@@ -58,7 +58,7 @@ class MultiRepositoryTest {
         val release = CountDownLatch(1)
         val urls = (1..5).map { "github.com/acme/r$it" }
         val thread = Thread {
-            scanner().scanAllWith(urls) { url ->
+            scanner().scanAllWith(urls) { url, _ ->
                 started.countDown()
                 release.await(10, TimeUnit.SECONDS)
                 result(GitHubUrl.parse(url).toString())
@@ -72,10 +72,69 @@ class MultiRepositoryTest {
 
     @Test
     fun `turns unexpected exceptions into failures with exit code 1`() {
-        val outcome = scanner().scanAllWith(listOf("github.com/acme/one")) { error("boom") }.single()
+        val outcome = scanner().scanAllWith(listOf("github.com/acme/one")) { _, _ -> error("boom") }.repositories.single()
 
         assertEquals("unexpected failure: boom", (outcome as RepositoryOutcome.Failed).error.message)
         assertEquals(ExitCode.INTERNAL_ERROR, outcome.error.exitCode)
+    }
+
+    private val acme = OwnerMetadata("acme", "Organization")
+
+    private fun listed(name: String) = RepositoryMetadata(name, "About $name", "main")
+
+    @Test
+    fun `expands an owner in place, scans each repository once, and orders failures by URL`() {
+        val discovered = Collections.synchronizedList(mutableListOf<String>())
+        val scanned = Collections.synchronizedList(mutableListOf<Pair<String, RepositoryMetadata?>>())
+        val scan = scanner().scanAllWith(
+            listOf("github.com/acme/two", "https://github.com/acme", "github.com/orgs/ACME", "github.com/nobody"),
+            discover = { login ->
+                discovered += login
+                if (login == "nobody") throw OwnerNotFoundException(login)
+                OwnerDiscovery(acme, listOf(listed("acme/broken"), listed("acme/fixtures"), listed("acme/one"), listed("acme/two")), checked = 5, skipped = 1)
+            },
+        ) { url, metadata ->
+            scanned += url to metadata
+            when (val name = metadata?.fullName ?: GitHubUrl.parse(url).toString()) {
+                "acme/one" -> one
+                "acme/two" -> two
+                "acme/fixtures" -> result("acme/fixtures")
+                else -> throw BranchNotFoundException("main", RepoCoordinates("acme", name.substringAfter('/')))
+            }
+        }
+
+        assertEquals(listOf("acme", "nobody"), discovered, "the same owner in another form is searched once")
+        assertEquals(listOf("acme/two", "acme/broken", "acme/fixtures", "acme/one"), scan.repositories.map { it.label })
+        assertEquals(listOf(null, "https://github.com/acme", "https://github.com/acme", "https://github.com/acme"), scan.repositories.map { it.from })
+        assertEquals(4, scanned.size, "acme/two was given directly first, so the owner doesn't scan it again")
+        assertEquals("https://github.com/acme/one" to listed("acme/one"), scanned.single { it.first.endsWith("/one") })
+        assertEquals(listOf("acme/two", "acme/broken", "acme/one"), scan.reported.map { it.label }, "an owner's repository without skills isn't reported")
+        assertEquals(4, scan.scanned.size + 1, "but it was scanned; only the broken one wasn't")
+
+        val searched = scan.owners.first() as OwnerOutcome.Searched
+        assertEquals(listOf("acme/one", "acme/two"), searched.withSkills, "acme/two counts for the owner too")
+        assertEquals("Searched acme: 2 of 5 repositories have skills (1 fork or archived skipped)", searched.line)
+        assertEquals(ExitCode.REPOSITORY_NOT_FOUND, (scan.owners[1] as OwnerOutcome.Failed).error.exitCode)
+        assertEquals(listOf("acme/broken", "nobody"), scan.failures.map { it.label })
+
+        val report = TextReport.render(Presentation.MultiList(scan))
+        assertTrue(
+            report.endsWith("\nSearched acme: 2 of 5 repositories have skills (1 fork or archived skipped)\nScanned 2 repositories: 4 skills, 2 failed\n"),
+            report,
+        )
+    }
+
+    @Test
+    fun `phrases the Searched line for every count`() {
+        fun line(checked: Int, withSkills: Int, skipped: Int) = OwnerOutcome.Searched(
+            "github.com/acme", OwnerDiscovery(acme, emptyList(), checked, skipped), List(withSkills) { "acme/r$it" },
+        ).line
+
+        assertEquals("Searched acme: 1 of 1 repository has skills", line(1, 1, 0))
+        assertEquals("Searched acme: 0 of 1 repository has skills (1 fork or archived skipped)", line(1, 0, 1))
+        assertEquals("Searched acme: 1 of 3 repositories has skills (2 forks or archived skipped)", line(3, 1, 2))
+        assertEquals("Searched acme: 0 of 0 repositories have skills", line(0, 0, 0))
+        assertEquals("Searched acme: 2 of 3 repositories have skills", line(3, 2, 0))
     }
 
     @Test

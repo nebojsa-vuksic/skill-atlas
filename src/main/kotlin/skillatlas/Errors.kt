@@ -28,6 +28,16 @@ class RepositoryNotFoundException(repository: RepoCoordinates) :
         ExitCode.REPOSITORY_NOT_FOUND,
     )
 
+class OwnerNotFoundException(login: String) :
+    SkillAtlasException("organization or user $login not found", ExitCode.REPOSITORY_NOT_FOUND)
+
+/** An owner URL given to something that works on one repository: `browse`, the shell's `/scan`, `/api/scan` (spec section 5.12). */
+class OwnerUrlNotSupportedException(url: String) :
+    SkillAtlasException(
+        "${url.trim()} names an organization or user, not a repository; use \"skill-atlas scan ${url.trim()}\" to search its repositories",
+        ExitCode.USAGE,
+    )
+
 class RepositoryAccessDeniedException(repository: RepoCoordinates, reason: String) :
     SkillAtlasException("access to repository $repository denied: $reason", ExitCode.REPOSITORY_NOT_FOUND)
 

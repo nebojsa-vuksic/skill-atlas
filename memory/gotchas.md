@@ -236,13 +236,26 @@ return "403 Blocked by network policy", and there's no sudo. What worked, all ou
   `https://cache-redirector.jetbrains.com/dl.google.com/dl/android/maven2/`.
 - Chrome headless shell from `storage.googleapis.com/chrome-for-testing-public/<version>/`
   into `~/.cache/ms-playwright/chromium_headless_shell-<rev>/` with an `INSTALLATION_COMPLETE`
-  file, and BtbN's static FFmpeg from GitHub as `ffmpeg-<rev>/ffmpeg-linux`.
+  file, and BtbN's static FFmpeg from GitHub as `ffmpeg-<rev>/ffmpeg-linux`. Without that
+  FFmpeg, run `./gradlew build -x installPlaywrightChromium` with
+  `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`; every test still runs.
 - Chromium's libraries and fonts via `apt-get download` with `-o Dir::State=/tmp/apt/state`,
   unpacked with `dpkg -x` into `~/.local/chromium-libs`; run Gradle with `LD_LIBRARY_PATH` and
   `FONTCONFIG_FILE` set.
 
-**Why:** without fonts, 12 browser tests failed on an untouched `main` with zero-height text.
+**Why:** without fonts, 12 browser tests failed on an untouched `main` with zero-height text,
+or Chromium crashed with `TargetClosedError`.
 **How to apply:** if browser tests fail with `height=0` or timeouts, check fonts before code.
+VHS and Kokoro aren't available there, so demos are recorded on the owner's machine. `gh`
+only works with the working directory inside a git checkout.
+
+## GitHub lists only a user's public repositories (2026-10-01)
+
+`GET /users/{user}/repos` never returns private repositories, even for the token's own
+account; `/orgs/{org}/repos?type=all` does include the private ones the token can see.
+
+**How to apply:** an owner scan of your own user account misses your private repositories.
+`/user/repos` would cover them; it isn't used yet.
 
 ## The 500-skill similarity timing test fails under IDE load (2026-10-01)
 
