@@ -44,4 +44,4 @@ If the UI changed on purpose: add or adjust the demo's key moments (spec 13.3), 
 - [ ] `./gradlew build` passes locally, and no test was skipped, disabled, or loosened
 - [ ] The **Demos** job is green: its screenshots match the baselines, or the baselines were updated on purpose (spec 13.5)
 - [ ] `memory/` is updated with the `shared-memory` skill if anything non-obvious was learned
-- [ ] CI is green on the latest commit, for both the `push` and `pull_request` runs
+- [ ] CI's `pull_request` run is green on the latest commit (Build and Demos)

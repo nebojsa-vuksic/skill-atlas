@@ -1,9 +1,18 @@
 name: CI
 
+# Actions minutes are billed for this private repository, so CI runs each change once:
+# pull requests through `pull_request`, `main` through `push`, and the Update screenshots
+# workflow through `workflow_dispatch`. Branches are checked when they have a PR (spec 11.3).
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+# A newer push to the same pull request cancels its older run that is still going.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -11,7 +20,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # macOS minutes cost ten times Linux ones: pull requests build on Linux, `main` on both.
+        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +59,9 @@ jobs:
   demos:
     # Demo tests (spec section 13): narrated recordings and key-moment screenshot comparison.
     name: Demos
-    runs-on: ubuntu-latest
+    # Pinned: baselines are only valid for one image's fonts and libraries (spec 13.1).
+    # Moving to a newer image is a deliberate change with re-recorded baselines.
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     concurrency:

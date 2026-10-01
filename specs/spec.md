@@ -1560,10 +1560,17 @@ were checked and that a cached request made none.
 
 ### 11.3 Continuous integration
 
-The GitHub Actions workflow `.github/workflows/ci.yml` runs `./gradlew build` on every
-push to any branch and on every pull request. It runs on `ubuntu-latest` and
-`macos-latest` with Java 21. When a run fails, the test reports are uploaded as an
-artifact.
+The GitHub Actions workflow `.github/workflows/ci.yml` runs `./gradlew build` once per
+change:
+- **Pull requests:** through the `pull_request` event, on `ubuntu-latest`. A newer push to
+  the same pull request cancels its older run that is still going.
+- **`main`:** through `push`, on `ubuntu-latest` and `macos-latest`.
+- **Workflow dispatch:** the Update screenshots workflow starts CI this way after it
+  commits baselines.
+
+Branches without a pull request don't run CI. Actions minutes are billed for this private
+repository, and macOS minutes cost ten times Linux ones. Java 21. When a run fails, the
+test reports are uploaded as an artifact.
 
 The test tools needed are `git`, a JDK, and `python3` (used to run the CLI in a
 pseudo-terminal and type keys into it). All three are preinstalled on GitHub-hosted runners.
@@ -1589,8 +1596,9 @@ done only when **all** of the following are true:
    integration test. No test may be skipped or disabled to make it pass.
 2. **The branch is pushed and has a pull request,** opened with
    `gh pr create --base main --fill` or with an explicit title and body.
-3. **CI is green on the pull request** for its latest commit, on every platform in the
-   matrix, and in the **Demos** job with its screenshot comparison. Watch it with
+3. **CI is green on the pull request** for its latest commit: the `pull_request` run's
+   build and the **Demos** job with its screenshot comparison. After the merge, CI on
+   `main` must also be green, on Linux and macOS. Watch it with
    `gh pr checks <pr> --watch`.
 4. **The pull request is merged** with `gh pr merge <pr> --merge --delete-branch`.
 
@@ -1640,7 +1648,7 @@ A demo test must give the same pixels on every run.
 before `Screenshot`. A moment that follows only an in-process key, such as Tab completion,
 uses a fixed pause instead, because VHS can't read an interactive program's live input line.
 Every `Screenshot` is followed by `Sleep 1s`, because VHS captures it asynchronously. |
-| Operating system | Ubuntu, the CI runner. Font rendering differs between operating systems, so baselines are produced and compared on Linux only. |
+| Operating system | Ubuntu 24.04, pinned as `ubuntu-24.04` for the Demos job and the Update screenshots workflow. Font rendering differs between operating systems and image versions, so baselines are produced and compared on that one image only. Moving to a newer image is a deliberate change that re-records every baseline. |
 
 Nothing time-dependent appears in a key moment. The scan-counter status line, spinners,
 and scan-log timestamps are recorded in the video but never screenshotted.

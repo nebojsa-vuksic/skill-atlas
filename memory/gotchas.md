@@ -298,3 +298,25 @@ and passed three times in a row alone.
 
 **How to apply:** check `uptime` and rerun on a quiet machine; never raise the limit.
 
+
+## "The job was not started because recent account payments have failed" (2026-10-01)
+
+Every Actions job on every branch, `main` included, failed with no steps. The check-run
+annotation said: "The job was not started because recent account payments have failed or
+your spending limit needs to be increased." It was billing, not code. Before that, every PR
+ran CI twice (`push` plus `pull_request`), with macOS at ten times the Linux rate and a
+12-minute Demos job.
+
+**How to apply:** when jobs fail with no steps, read the annotations
+(`gh api repos/<repo>/check-runs/<id>/annotations`) before debugging. Only the owner can fix
+billing. CI now runs `push` for `main` only, macOS only on `main`, and cancels a PR's older
+in-progress run.
+
+## The Demos runner is pinned to ubuntu-24.04 (2026-10-01)
+
+`ubuntu-latest` moves to Ubuntu 26 on 2026-10-19 (annotation on every run). A new image's
+fonts and libraries would change every screenshot at once.
+
+**How to apply:** the Demos job and Update screenshots use `ubuntu-24.04`. Moving to a new
+image is a separate PR: change both `runs-on` lines, run Update screenshots, and review the
+diffs.
