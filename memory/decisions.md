@@ -147,3 +147,16 @@ linked from the README (spec 13.5).
 
 **How to apply:** when a feature changes what users see, update or add a tour demo, record
 it again, and republish with `demo/publish.sh tour …`.
+
+## The PR review automation's instructions live in the repo (2026-10-01)
+
+The JetBrains Air Teams PR review automation is set up in the web UI, with triggers
+**PR opened** and **PR has new changes**, both on **No code changes**. Its Instructions
+field only points to `.agents/automations/review.md`. A re-review covers only the commits
+since the `reviewed-sha` marker in its last summary.
+
+**Why:** Air has no repository file format for automations. Triggers, model and connectors
+exist only in the UI. Pointing to the file means review rules are versioned and reviewed
+like code. The owner wants findings only, with no nit comments.
+**How to apply:** change review behavior by editing that file, not the UI. If you change a
+trigger or connector in the UI, update the Setup table in the file to match.
