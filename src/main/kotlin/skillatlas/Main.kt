@@ -177,14 +177,15 @@ class SkillAtlasCli(
     private inner class ScanCommand : CoreCliktCommand(name = "scan") {
         private val urls by argument(
             name = "github-project-url",
-            help = "Repositories to scan, e.g. https://github.com/owner/repo; give several to scan them together",
+            help = "Repositories to scan, e.g. https://github.com/owner/repo, or an organization or user, e.g. " +
+                "https://github.com/owner, to scan all of its repositories; give several to scan them together",
         ).multiple(required = true)
 
         private val filter by option("-f", "--filter", metavar = "<words>", help = "List only skills whose name or description has every word; repo:<text> narrows repositories")
         private val skill by option("-s", "--skill", metavar = "<name-or-path>", help = "Show one skill's details, similar skills and content")
 
         override fun help(context: Context) =
-            "Scan the default branch of GitHub repositories and list their skills."
+            "Scan the default branch of GitHub repositories, or of every repository of an organization or user, and list their skills."
 
         /** Read before scanning, so a warning about the stars file never cuts into the rich view. */
         private var starred: List<Star> = emptyList()
@@ -195,7 +196,9 @@ class SkillAtlasCli(
                 throw ProgramResult(ExitCode.USAGE)
             }
             starred = stars.readOrWarn(err::println)
-            if (urls.size == 1) scanOne(urls.single()) else scanMany(urls)
+            // An owner URL always gets the several-repositories report, which says what was searched (spec section 5.12).
+            val owner = urls.any { runCatching { GitHubUrl.target(it) }.getOrNull() is ScanTarget.Owner }
+            if (urls.size == 1 && !owner) scanOne(urls.single()) else scanMany(urls)
         }
 
         private fun scanOne(url: String) {
@@ -224,12 +227,15 @@ class SkillAtlasCli(
             }
         }
 
-        /** Several repositories (spec section 5.10): each failure is reported after the others, and the first one sets the exit code. */
+        /**
+         * Several repositories and owners (spec sections 5.10 and 5.12): each failure is reported after the
+         * others, and the first one sets the exit code.
+         */
         private fun scanMany(urls: List<String>) {
-            var outcomes: List<RepositoryOutcome> = emptyList()
+            var scan = MultiScan(emptyList())
             fun finish(extraError: SkillAtlasException? = null): Nothing? {
-                outcomes.filterIsInstance<RepositoryOutcome.Scanned>().forEach { appendToScanLog(it.result) }
-                val failures = outcomes.filterIsInstance<RepositoryOutcome.Failed>()
+                scan.scanned.forEach(::appendToScanLog)
+                val failures = scan.failures
                 for (failure in failures) err.println("error: ${failure.label}: ${failure.error.message}")
                 if (extraError != null) err.println("error: ${extraError.message}")
                 val code = failures.firstOrNull()?.error?.exitCode ?: extraError?.exitCode
@@ -239,10 +245,8 @@ class SkillAtlasCli(
 
             try {
                 view.show { progress ->
-                    outcomes = multiScanner.scanAll(urls, progress).map { outcome ->
-                        if (outcome is RepositoryOutcome.Scanned) outcome.copy(result = outcome.result.withStars(starred)) else outcome
-                    }
-                    presentMany(outcomes)
+                    scan = multiScanner.scanAll(urls, progress).withStars(starred)
+                    presentMany(scan)
                 }
             } catch (e: SkillAtlasException) {
                 finish(extraError = e)
@@ -253,11 +257,11 @@ class SkillAtlasCli(
             finish()
         }
 
-        private fun presentMany(outcomes: List<RepositoryOutcome>): Presentation {
-            val selector = skill ?: return Presentation.MultiList(outcomes, filter?.takeIf { it.isNotBlank() })
-            val results = outcomes.filterIsInstance<RepositoryOutcome.Scanned>().map { it.result }
+        private fun presentMany(scan: MultiScan): Presentation {
+            val selector = skill ?: return Presentation.MultiList(scan, filter?.takeIf { it.isNotBlank() })
+            val results = scan.reported.filterIsInstance<RepositoryOutcome.Scanned>().map { it.result }
             // With nothing scanned there is no skill to show; the summary and the errors say why.
-            if (results.isEmpty()) return Presentation.MultiList(outcomes)
+            if (results.isEmpty()) return Presentation.MultiList(scan)
             return Presentation.detail(results, selector)
         }
     }

@@ -33,6 +33,32 @@ class GitHubUrlTest {
     }
 
     @Test
+    fun `names an owner with every owner URL form from the spec`() {
+        val forms = listOf(
+            "https://github.com/owner",
+            "https://github.com/owner/",
+            "http://github.com/owner",
+            "github.com/owner",
+            "  https://www.GitHub.com/owner  ",
+            "https://github.com/orgs/owner",
+            "github.com/orgs/owner/",
+            "https://github.com/orgs/owner/repositories",
+        )
+        for (form in forms) assertEquals(ScanTarget.Owner("owner"), GitHubUrl.target(form), form)
+        assertEquals(ScanTarget.Repository(expected), GitHubUrl.target("git@github.com:owner/repo.git"))
+    }
+
+    @Test
+    fun `parse still rejects owner URLs, and orgs is never a repository owner`() {
+        for (input in listOf("https://github.com/owner", "github.com/orgs/owner", "github.com/orgs/owner/repositories", "github.com/orgs")) {
+            assertFailsWith<InvalidUrlException>(input) { GitHubUrl.parse(input) }
+        }
+        for (input in listOf("github.com/orgs", "github.com/orgs/owner/settings", "git@github.com:owner", "https://github.com/ow ner")) {
+            assertFailsWith<InvalidUrlException>(input) { GitHubUrl.target(input) }
+        }
+    }
+
+    @Test
     fun `rejects anything else with a usage error`() {
         val invalid = listOf(
             "",

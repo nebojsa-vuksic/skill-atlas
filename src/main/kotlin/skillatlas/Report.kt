@@ -36,6 +36,7 @@ object TextReport {
                     skillList(list)
                 }
                 if (presentation.lists.isNotEmpty()) appendLine()
+                for (owner in presentation.owners) appendLine(owner.line)
                 appendLine(presentation.summary)
             }
             is Presentation.StarChanged -> appendLine(presentation.message)

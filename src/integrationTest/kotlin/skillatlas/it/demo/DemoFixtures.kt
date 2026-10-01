@@ -1,6 +1,7 @@
 package skillatlas.it.demo
 
 import skillatlas.it.Sandbox
+import skillatlas.it.StubGitHubApi
 
 /**
  * The repositories every demo test uses (spec section 13.1): realistic content under neutral
@@ -9,19 +10,34 @@ import skillatlas.it.Sandbox
  * - `acme/agent-skills`: ordinary skills, like a public skills collection
  * - `acme/workbench`: every skill in `.agents` and `.claude`, some also shipped in a plugin
  * - `acme/agent-framework`: two skills, plus test fixtures that are not skills
+ *
+ * `acme` is also an organization (spec section 5.12) that lists all three, plus a fork, an
+ * archived repository and a website without skills.
  */
 object DemoFixtures {
     const val SKILLS = "acme/agent-skills"
     const val WORKBENCH = "acme/workbench"
     const val FRAMEWORK = "acme/agent-framework"
+    const val OWNER = "acme"
 
     fun install(sandbox: Sandbox) {
-        sandbox.api.repository(SKILLS, "Agent skills for documents, design and testing")
-        sandbox.createRepository(SKILLS, agentSkills())
-        sandbox.api.repository(WORKBENCH, "A language workbench and its agent skills")
-        sandbox.createRepository(WORKBENCH, workbench())
-        sandbox.api.repository(FRAMEWORK, "A framework for building AI agents on the JVM")
-        sandbox.createRepository(FRAMEWORK, framework())
+        val repositories = listOf(
+            Triple(SKILLS, "Agent skills for documents, design and testing", agentSkills()),
+            Triple(WORKBENCH, "A language workbench and its agent skills", workbench()),
+            Triple(FRAMEWORK, "A framework for building AI agents on the JVM", framework()),
+        )
+        for ((name, description, files) in repositories) {
+            sandbox.api.repository(name, description)
+            sandbox.createRepository(name, files)
+            sandbox.api.tree(name, files.keys)
+        }
+        val listed = repositories.map { (name, description) -> StubGitHubApi.Listed(name.substringAfter('/'), description) } + listOf(
+            StubGitHubApi.Listed("agent-skills-fork", "A fork of the agent skills", fork = true),
+            StubGitHubApi.Listed("legacy-tools", "Tools from before the framework", archived = true),
+            StubGitHubApi.Listed("website", "The project website"),
+        )
+        sandbox.api.owner(OWNER, listed.sortedBy { it.name.lowercase() })
+        sandbox.api.tree("$OWNER/website", listOf("README.md", "index.html"))
     }
 
     // Quoted, because descriptions contain ": ", which YAML would otherwise read as a new key.

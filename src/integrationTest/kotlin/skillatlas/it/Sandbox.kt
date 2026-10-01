@@ -257,11 +257,16 @@ class StubGitHubApi : AutoCloseable {
 
     private val responses = mutableMapOf<String, Response>()
     private val held = mutableListOf<CountDownLatch>()
+    private val received = mutableListOf<String>()
     private val executor = Executors.newCachedThreadPool()
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         executor = this@StubGitHubApi.executor
         createContext("/") { exchange ->
-            val response = synchronized(responses) { responses[exchange.requestURI.path] }
+            val path = exchange.requestURI.path
+            val withQuery = exchange.requestURI.rawQuery?.let { "$path?$it" } ?: path
+            synchronized(received) { received += withQuery }
+            // A response registered with its query string wins over one for the bare path.
+            val response = synchronized(responses) { responses[withQuery] ?: responses[path] }
                 ?: Response(404, """{"message":"Not Found"}""", emptyMap(), null)
             response.hold?.await()
             response.headers.forEach { (name, value) -> exchange.responseHeaders.add(name, value) }
@@ -287,8 +292,45 @@ class StubGitHubApi : AutoCloseable {
         )
     }
 
-    fun rateLimited(fullName: String) = respond(
-        "/repos/$fullName",
+    fun rateLimited(fullName: String) = rateLimitedPath("/repos/$fullName")
+
+    /** Every request path, with its query string, in the order the stub got them. */
+    fun requests(): List<String> = synchronized(received) { received.toList() }
+
+    /** A repository as an owner's repository list shows it (spec section 5.12). */
+    class Listed(val name: String, val description: String? = null, val fork: Boolean = false, val archived: Boolean = false)
+
+    /** An organization or user with [repositories], served 100 per page like GitHub, sorted the way it was given. */
+    fun owner(login: String, repositories: List<Listed>, type: String = "Organization") {
+        respond("/users/$login", 200, """{"login":"$login","type":"$type"}""")
+        val list = if (type == "Organization") "/orgs/$login/repos?type=all" else "/users/$login/repos?type=owner"
+        val pages = repositories.chunked(100).ifEmpty { listOf(emptyList()) }
+        pages.forEachIndexed { i, page ->
+            val body = page.joinToString(",", "[", "]") { repository ->
+                val description = repository.description?.let { "\"$it\"" } ?: "null"
+                """{"full_name":"$login/${repository.name}","description":$description,"default_branch":"main",""" +
+                    """"fork":${repository.fork},"archived":${repository.archived},"private":false}"""
+            }
+            respond("$list&sort=full_name&per_page=100&page=${i + 1}", 200, body)
+        }
+        // A full last page means another request, which then gets an empty page.
+        if (pages.last().size == 100) respond("$list&sort=full_name&per_page=100&page=${pages.size + 1}", 200, "[]")
+    }
+
+    /** The recursive tree of `main` in [fullName], listing [paths] as files. */
+    fun tree(fullName: String, paths: Collection<String>, truncated: Boolean = false) {
+        val entries = paths.joinToString(",") { """{"path":"$it","mode":"100644","type":"blob","sha":"0","size":1}""" }
+        respond("/repos/$fullName/git/trees/main?recursive=1", 200, """{"sha":"0","tree":[$entries],"truncated":$truncated}""")
+    }
+
+    /** What GitHub answers for the tree of a repository without commits. */
+    fun emptyTree(fullName: String) =
+        respond("/repos/$fullName/git/trees/main?recursive=1", 409, """{"message":"Git Repository is empty."}""")
+
+    fun rateLimitedTree(fullName: String) = rateLimitedPath("/repos/$fullName/git/trees/main?recursive=1")
+
+    private fun rateLimitedPath(path: String) = respond(
+        path,
         403,
         """{"message":"API rate limit exceeded"}""",
         mapOf("x-ratelimit-remaining" to "0"),

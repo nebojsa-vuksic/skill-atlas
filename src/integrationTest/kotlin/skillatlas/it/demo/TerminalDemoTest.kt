@@ -38,4 +38,7 @@ class TerminalDemoTest {
 
     @Test
     fun shell() = TerminalDemo.run("shell", sandbox, LAUNCHER)
+
+    @Test
+    fun org() = TerminalDemo.run("org", sandbox, LAUNCHER)
 }

@@ -24,9 +24,11 @@ needs access to this private repository.
 | [web-search](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-search/web.mp4) | Merged copies, product skills, the filter, snippets, URL state | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-search/web.gif?raw=true) |
 | [web-multi](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-multi/web.mp4) | Three repositories, `repo:` search, similar skills across repositories | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-multi/web.gif?raw=true) |
 | [web-stars](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-stars/web.mp4) | Starring with the button and `s`, the starred-only filter, stars kept after a reload | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-stars/web.gif?raw=true) |
+| [web-org](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-org/web.mp4) | An organization and one of its repositories: the owner chip, the `Searched` line, removing the owner | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-org/web.gif?raw=true) |
 | [cli](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/cli/terminal.mp4) | `scan` rich and plain, merged copies, fixtures, `--skill`, several repositories | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/cli/terminal.gif?raw=true) |
 | [browse](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/browse/terminal.mp4) | `browse`: moving, filtering, similar skills | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/browse/terminal.gif?raw=true) |
 | [shell](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/shell/terminal.mp4) | The shell: palette, `/scan`, skill-name completion | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/shell/terminal.gif?raw=true) |
+| [org](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/org/terminal.mp4) | `scan` of an organization, mixed with a repository, and `browse` refusing one | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/org/terminal.gif?raw=true) |
 
 ## Requirements
 
@@ -54,6 +56,19 @@ skill-atlas scan github.com/JetBrains/MPS github.com/JetBrains/koog --filter "re
 `repo:<text>` narrows a search to repositories whose name contains `<text>`. The web view
 takes several URLs at once, groups the skills by repository, and finds similar skills
 across them.
+
+### Whole organizations
+
+```
+GITHUB_TOKEN=$(gh auth token) skill-atlas scan https://github.com/JetBrains
+```
+
+An organization or user URL scans every repository of that owner that has skills. Forks
+and archived repositories are skipped, and each repository's file tree is checked through
+the GitHub API first, so only repositories with a `SKILL.md` are cloned. The report ends
+with a `Searched <owner>: <k> of <n> repositories have skills` line. Owner URLs mix with
+repository URLs, and the web view shows an owner as one chip. It makes about one API
+request per repository, so set `GITHUB_TOKEN`. See spec section 5.12.
 
 ### Demo tests and screenshots
 

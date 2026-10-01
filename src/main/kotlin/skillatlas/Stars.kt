@@ -129,3 +129,7 @@ fun ScanResult.withStars(stars: List<Star>): ScanResult {
     if (skills.all { it.starred == starred(it) }) return this
     return copy(skills = skills.map { it.copy(starred = starred(it)) })
 }
+
+/** This scan with [ScanResult.withStars] applied to every scanned repository; failures stay as they were. */
+fun MultiScan.withStars(stars: List<Star>): MultiScan =
+    copy(repositories = repositories.map { if (it is RepositoryOutcome.Scanned) it.copy(result = it.result.withStars(stars)) else it })

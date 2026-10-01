@@ -16,6 +16,7 @@ import kotlin.io.path.writeText
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
@@ -68,6 +69,17 @@ class ShellSessionTest {
     fun `scan asks for a background scan of the URL`() {
         assertEquals(ShellOutcome.Scan("github.com/acme/skills"), session().execute("/scan   github.com/acme/skills "))
         assertEquals(listOf(ShellBlock.Error("usage: /scan <url>")), blocks(session().execute("/scan")))
+    }
+
+    @Test
+    fun `scan rejects an owner URL, since the shell works on one repository`() {
+        val error = assertFailsWith<OwnerUrlNotSupportedException> { session().scan("https://github.com/acme") {} }
+        assertEquals(
+            "https://github.com/acme names an organization or user, not a repository; " +
+                "use \"skill-atlas scan https://github.com/acme\" to search its repositories",
+            error.message,
+        )
+        assertEquals(ExitCode.USAGE, error.exitCode)
     }
 
     @Test

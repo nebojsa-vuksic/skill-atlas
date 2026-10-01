@@ -12,6 +12,13 @@ shown in a rich, color-highlighted view built with Mosaic (section 5.1).
 skill-atlas scan <github-project-url>
 ```
 
+Given an organization or a user instead of a repository, Skill Atlas searches all of
+that owner's repositories and collects the skills of each one (section 5.12).
+
+```
+skill-atlas scan https://github.com/<organization>
+```
+
 ## 2. Definitions
 
 | Term | Meaning |
@@ -20,6 +27,8 @@ skill-atlas scan <github-project-url>
 | **Skill file** | The `SKILL.md` file itself. |
 | **Frontmatter** | The YAML block at the top of a skill file, between the opening `---` line and the next `---` line. |
 | **Scanned commit** | The full 40-character SHA of the commit whose files were read. |
+| **Owner** | A GitHub organization or user account, the first segment of a repository's `owner/repo`. |
+| **Owner URL** | A URL that names an owner instead of a repository, e.g. `https://github.com/JetBrains` (section 3.3). |
 
 
 ## 3. CLI interface
@@ -29,7 +38,7 @@ skill-atlas scan <github-project-url>
 ```
 skill-atlas
 skill-atlas shell
-skill-atlas scan <github-project-url>... [--filter <words>] [--skill <name-or-path>]
+skill-atlas scan <github-url>... [--filter <words>] [--skill <name-or-path>]
 skill-atlas browse <github-project-url>
 skill-atlas serve [--port <port>]
 skill-atlas star <github-project-url> <name-or-path>
@@ -48,6 +57,7 @@ before.
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `<github-project-url>` | yes | URL of the GitHub repository to scan. See 3.3 for accepted forms. |
+| `<github-url>` | yes | `scan` only: a repository URL, or an owner URL to scan all of that owner's repositories (section 5.12). |
 | `<name-or-path>` | `star` and `unstar` only | The skill to star or unstar, found like `--skill` (sections 5.7 and 5.11). |
 
 ### 3.3 Accepted URL forms
@@ -63,6 +73,18 @@ Skill Atlas must accept all of the following and normalize each one to `owner/re
 
 Anything else, such as a non-GitHub host or a URL with no repo segment, is rejected
 with exit code `2` (see section 7).
+
+**Owner URLs.** `scan` and the web view also accept a URL that names an organization or a
+user, and normalize it to `owner`:
+
+- `https://github.com/owner`, with the same variants as above: a trailing slash, `http://`,
+  no scheme, or `www.github.com`
+- `https://github.com/orgs/owner` and `https://github.com/orgs/owner/repositories`, the
+  addresses of GitHub's organization pages
+
+GitHub reserves the name `orgs`, so `github.com/orgs/<name>` is always an owner, never a
+repository. The commands that work on one repository (`browse`, the shell's `/scan`, and
+`GET /api/scan`) reject an owner URL with its own message (section 5.12).
 
 ### 3.4 Options
 
@@ -641,6 +663,7 @@ version of the web view in the terminal. It is built with Mosaic.
 - **Scanning.** It shows the same live status line as `scan` (section 5.1). Scan errors
   exit with the codes and messages of section 7, and a successful scan appends one line
   to the scan log.
+- **One repository.** An owner URL exits `2` with the message of section 5.12.
 - **Size.** The view fills the terminal's current size, minus one row so the last line
   never scrolls the screen, and it adapts when the terminal is resized. Below 60×10 it
   shows only `Terminal too small: browse needs at least 60×10.`
@@ -786,7 +809,7 @@ Enter runs the input as typed.
 
 | Command | Needs a repository | Effect |
 |---------|--------------------|--------|
-| `/scan <url>` | no | Scans like `scan` and makes the result the current repository. Prints the rich report (section 5.1). |
+| `/scan <url>` | no | Scans like `scan` and makes the result the current repository. Prints the rich report (section 5.1). An owner URL prints the error of section 5.12. |
 | `/filter <words>` | yes | Lists the matching skills, like `scan --filter`, in the rich view (section 5.7). Without words, lists every skill. |
 | `/skill <name-or-path>` | yes | Shows one skill, like `scan --skill` (section 5.7). |
 | `/similar <name-or-path>` | yes | Shows only that skill's similar-skills table: `Similar to <name>`, then the rows of section 5.7. |
@@ -856,7 +879,8 @@ Enter runs the input as typed.
 ### 5.10 Several repositories, with search
 
 `scan` and the web view work on several repositories at once. The filter searches across
-all of them. `browse` and the interactive shell stay single-repository for now.
+all of them. `browse` and the interactive shell stay single-repository for now. Section
+5.12 extends this to every repository of an organization or user.
 
 **Scanning.** Each repository is scanned exactly as in section 4, on its own. Up to 4 scans
 run at the same time. The results are combined in the order the URLs were given.
@@ -1101,6 +1125,179 @@ and it doesn't write the scan log.
   `"exit_code": 1`.
 - **Other methods:** `GET /api/star` gets `405` with `Allow: POST`.
 
+### 5.12 Organizations and users
+
+`scan` and the web view also accept an **owner URL** (section 3.3), such as
+`https://github.com/JetBrains`. Skill Atlas then finds every repository of that
+organization or user that has skill files, and scans those repositories together, as in
+section 5.10. Owner URLs and repository URLs can be mixed in one scan.
+
+**Finding the repositories.** For each owner:
+
+1. **Owner.** `GET /users/{owner}` says whether the owner is an organization or a user
+   (`type`), and gives its name as GitHub spells it (`login`). A `404` fails the owner with
+   `organization or user <owner> not found` (exit `3`).
+2. **List.** Every repository of the owner is listed, 100 per page, from page 1 until a
+   page has fewer than 100 entries:
+   - organization: `GET /orgs/{owner}/repos?type=all&sort=full_name&per_page=100&page=<n>`,
+     which includes the private repositories that `GITHUB_TOKEN` can see
+   - user: `GET /users/{owner}/repos?type=owner&sort=full_name&per_page=100&page=<n>`,
+     which lists public repositories only, even for the token's own account
+3. **Skip** forks and archived repositories. A fork mostly repeats its upstream's skills,
+   and an archived repository is no longer maintained. They are counted as *skipped*.
+4. **Check** every other repository for skill files without cloning it, up to 8 at a
+   time: `GET /repos/{owner}/{repo}/git/trees/{default-branch}?recursive=1`, with the
+   branch name URL-encoded. Cloning every repository would be far too slow:
+   `JetBrains` has 865 repositories, and only a few of them have skills.
+
+   | Answer | Outcome |
+   |--------|---------|
+   | The tree has a file named exactly `SKILL.md`, at any depth | Scanned |
+   | `"truncated": true` (the tree is too large for one response) | Scanned, because only a clone can tell |
+   | `404`, or `409` (an empty repository) | No skills; not scanned |
+   | Rate limited | The whole owner fails with the rate-limit message of section 7 (exit `5`) |
+   | Any other failure | Scanned, so the clone reports the real error |
+5. **Scan** each repository that passed the check, like section 4.1 steps 3 to 8. The
+   listing already has the repository's name, description and default branch, so there is
+   no second metadata request. These scans share the limit of 4 at a time of section 5.10.
+
+**Order and duplicates.** An owner's repositories take the owner URL's place in the list
+of URLs, sorted by `owner/name` ignoring case. A repository given more than once, directly
+or through an owner, is scanned once, at its first position.
+
+**What is reported.** Only the owner's repositories that list at least one skill. A
+repository that passed the check but lists no skills, for example because its only
+`SKILL.md` files are test fixtures or sit under `node_modules`, is left out of the report.
+It was scanned, so it still gets its scan log line. The owner's repositories that fail are
+reported like any failed repository in section 5.10.
+
+**Progress.** For each owner, `Listing repositories of <owner>...`, then
+`Checking <n> repositories of <owner> for skill files...` (`repository` when `<n>` is 1,
+and the owner spelled as GitHub spells it), then the usual
+`Cloning <owner>/<repo> (<branch>)...` for each repository that is scanned. They go to
+stderr in the plain format, and to the status line in the rich view.
+
+**Rate limits.** An owner scan makes about one API request per repository, so it needs
+`GITHUB_TOKEN` for all but the smallest owners: without a token GitHub allows 60 requests
+an hour.
+
+#### CLI
+
+`scan` with at least one owner URL always uses the several-repositories format of section
+5.10, even when only one repository has skills, so that the output says what was searched.
+Right before the summary line there is one line per owner, in the order the URLs were
+given:
+
+```
+Searched acme: 2 of 3 repositories have skills (1 fork or archived skipped)
+Scanned 2 repositories: 3 skills
+```
+
+- `<n>` in `<k> of <n>` counts the repositories that were checked, so it leaves out the
+  skipped ones. `<k>` counts those that list at least one skill, including one that is
+  reported under an earlier URL because it was given twice.
+- Grammar: `1 of 3 repositories has skills`, `0 of 1 repository has skills`,
+  `0 of 3 repositories have skills`. The part in
+  parentheses is left out when nothing was skipped, and reads `(<s> forks or archived
+  skipped)` when more than one was.
+- A failed owner has no `Searched` line. Its `error: <owner>: <message>` line goes to
+  stderr with the other failures, in URL order, and its exit code counts at the owner
+  URL's position. The summary counts it in `, <f> failed`.
+- With no repository reported, the output is only the `Searched` lines and the summary,
+  e.g. `Scanned 0 repositories: 0 skills`. The exit code is `0` when nothing failed.
+- **Rich view:** the same lines. `Searched` lines are in the default color with the owner
+  name in bold cyan. The summary stays bold green.
+- `--filter`, `repo:` and `--skill` work across all the repositories, as in section 5.10.
+
+Plain example, for the organization used by the tests (`OwnerIntegrationTest`). It lists 8
+repositories: a fork and an archived one, which are skipped; `docs` without a `SKILL.md`
+and an empty one, which are never cloned; `fixtures` with only a test fixture, which is
+cloned but left out; `Big`, whose tree is truncated; and `one` and `two`:
+
+```
+Repository:  acme/Big
+Description: Big monorepo
+Commit:      <sha> (main)
+
+Found 1 skill:
+
+  big-skill
+    Handle the big monorepo.
+    tools/big
+
+────────────────────────────────────────────────────────────────────────────────
+
+Repository:  acme/one
+…
+
+────────────────────────────────────────────────────────────────────────────────
+
+Repository:  acme/two
+…
+
+Searched acme: 3 of 6 repositories have skills (2 forks or archived skipped)
+Scanned 3 repositories: 4 skills
+```
+
+#### Web view
+
+- **Adding an owner.** The repository field accepts owner URLs too, mixed with repository
+  URLs. The page URL keeps the owner URL as given (`?url=github.com/acme`), so a link
+  repeats the search.
+- **Chip.** An owner gets one chip, with class `owner`: the owner name, a muted
+  `<k> repos` (or `1 repo`), and the total number of skills in those repositories. Its
+  tooltip is the `Searched` line. The `×` removes the owner, and with it every repository
+  that came only from that owner. A failed owner's chip shows `failed`.
+- **Layout.** With an owner the page always uses the several-repositories layout of
+  section 5.10: the summary table, and the skill list grouped by repository. The owner's
+  repositories are rows of the table like any other. Under the table, the page shows the
+  `Searched` line of each owner, and a failed owner's `error: …` line. The only exception
+  is a single owner URL that failed: the page shows its error, like one failed
+  repository.
+- **API.** `GET /api/scans` accepts owner URLs in `url`. Each one counts once towards the
+  limit of 10. The response gains an `owners` array, in URL order, and every repository
+  that came from an owner gets `"from"`, the owner URL as given. Its own `url` is
+  `https://github.com/<owner>/<repo>`.
+
+```json
+{
+  "repositories": [
+    {"url": "https://github.com/acme/one", "from": "github.com/acme", "name": "acme/one", "description": "Acme tools",
+     "branch": "main", "commit": "<sha>", "skill_count": 2}
+  ],
+  "owners": [
+    {"url": "github.com/acme", "name": "acme", "type": "Organization", "repository_count": 6, "skipped": 2,
+     "repositories": ["acme/Big", "acme/one", "acme/two"],
+     "summary": "Searched acme: 3 of 6 repositories have skills (2 forks or archived skipped)"},
+    {"url": "github.com/nobody", "name": "nobody", "error": "organization or user nobody not found", "exit_code": 3}
+  ],
+  "skills": ["…as in section 5.10"],
+  "ignored": []
+}
+```
+
+  - `repository_count` is `<n>` of the `Searched` line, `skipped` is `<s>`, and
+    `repositories` lists the repositories with skills, in order, which gives `<k>`.
+    `summary` is the `Searched` line itself, so the page doesn't repeat its grammar.
+  - `owners` is `[]` when no owner URL was given, so the rest of the response is exactly
+    as in section 5.10.
+  - **Cache:** an owner's list of repositories to scan is kept for 10 minutes, keyed by the
+    owner name ignoring case, like scan results. Every repository scanned through an owner
+    is cached too, including one without skills. Within 10 minutes the same request
+    therefore makes no GitHub API request, no clone and no scan log line. A failed owner is
+    never cached.
+
+#### Commands that work on one repository
+
+`browse`, the shell's `/scan` and `GET /api/scan` take one repository. Given an owner URL,
+they fail with the message
+`<url> names an organization or user, not a repository; use "skill-atlas scan <url>" to search its repositories`:
+`browse` exits `2`, the shell prints it inline in red and keeps running, and `/api/scan`
+answers `400` with `exit_code: 2`.
+
+The implementation plan for this section is in
+[`specs/plans/organization-scan.md`](plans/organization-scan.md).
+
 ## 6. Scan log
 
 Every successful scan is logged, in addition to the report on stdout.
@@ -1124,7 +1321,9 @@ Every successful scan is logged, in addition to the report on stdout.
 | `0` | Scan completed, including when zero skills were found | |
 | `1` | Unexpected internal error, or the stars file can't be read or saved (section 5.11) | `error: unexpected failure: <details>`, `error: could not save stars <file>: <reason>` |
 | `2` | Invalid usage or URL | `error: not a GitHub repository URL: https://gitlab.com/a/b` |
+| `2` | Owner URL given to a command that works on one repository (section 5.12) | `error: github.com/acme names an organization or user, not a repository; use "skill-atlas scan github.com/acme" to search its repositories` |
 | `3` | Repository not found or not accessible | `error: repository owner/repo not found (is it private? set GITHUB_TOKEN)` |
+| `3` | Owner URL names no organization or user (section 5.12) | `error: nobody: organization or user nobody not found` |
 | `4` | Default branch cannot be cloned, e.g. the repository is empty | `error: branch 'main' not found in owner/repo (is the repository empty?)` |
 | `5` | Network or GitHub API failure, including rate limiting | `error: GitHub API rate limit exceeded; set GITHUB_TOKEN to raise the limit` |
 | `6` | `--skill`, `star` or `unstar` names no skill in the repository | `error: no skill 'pdf' in owner/repo` |
@@ -1213,6 +1412,16 @@ skill (section 4.3).
 27. In the web view, the star button stars or unstars the selected skill, the list shows
     `★`, and the starred-only button filters to starred skills. A star set in one view
     shows in every other, because they share one stars file (section 5.11).
+28. `scan https://github.com/<organization>` reports the skills of every repository of
+    that organization that has any, skips forks and archived repositories, clones only the
+    repositories whose tree has a `SKILL.md`, and ends with the `Searched` line (section
+    5.12). A user account works the same way.
+29. Owner URLs and repository URLs mix in one `scan` and in the web view; a repository is
+    scanned once however often it is given, and an unknown owner doesn't hide the others.
+30. The web view shows an owner as one chip; removing it removes its repositories. Within
+    10 minutes the same owner loads again without a GitHub request or a clone.
+31. `browse`, the shell's `/scan` and `GET /api/scan` reject an owner URL with the message
+    of section 5.12.
 
 ## 11. Testing
 
@@ -1265,6 +1474,10 @@ They are meant for tests only.
 |----------|---------|--------|
 | `SKILL_ATLAS_GITHUB_API_URL` | `https://api.github.com` | Base URL of the GitHub REST API |
 | `SKILL_ATLAS_GIT_BASE_URL` | `https://github.com` | Repositories are cloned from `<base>/<owner>/<repo>.git` |
+
+The stub API serves owners (`/users/{owner}`), paged repository lists, and trees from the
+same fixtures. It records every request it gets, so a test can assert which repositories
+were checked and that a cached request made none.
 
 **Required scenarios:**
 
@@ -1332,6 +1545,17 @@ They are meant for tests only.
 | Web API scan | Exact JSON body; one scan log line; temp directory removed |
 | Web API errors | Invalid URL `400`, unknown repository `404`, missing `url` `400`; exact JSON bodies |
 | Web security | Foreign `Host` header `403`; `POST` `405`; unknown path `404`; CSP header present |
+| Owner URL forms | Every owner form of section 3.3 gives the owner, `orgs/<name>` included; `GitHubUrl.parse` still rejects them as repositories |
+| Owner discovery | Unit tests: forks and archived skipped, every tree answer of section 5.12 step 4, sorting, pages until a short page, rate limit fails the owner |
+| `scan <organization-url>` | Exact plain output and progress: forks and archived skipped, an empty repository and one without `SKILL.md` never cloned, a truncated tree cloned, a repository with only test fixtures left out but logged; the `Searched` line; temp directories removed |
+| `scan <user-url>` | Lists through `/users/{user}/repos` and reports like an organization |
+| Owner with many repositories | 101 repositories over two pages; page 2 is requested and page 3 isn't |
+| Owner mixed with repositories | Order, a repository given directly and through the owner scanned once and counted in `<k>`, similar skills across them |
+| Owner failures | Unknown owner exits `3` with the others still reported; rate limited while checking exits `5` |
+| Owner in a terminal | Escape codes are present, and the `Searched` line and summary match section 5.12 |
+| Owner URL in single-repository commands | `browse` exits `2`, the shell prints the error inline, `/api/scan` answers `400`; exact messages |
+| Web API owners | Exact `owners` JSON and `from` fields; an unknown owner in its row with `200`; a second request makes no GitHub request and adds no scan log line |
+| Browser: owners | An owner URL gives one owner chip, its repositories in the table and grouped list, and the `Searched` line; removing the chip drops them; the URL restores the owner |
 
 ### 11.3 Continuous integration
 
@@ -1408,7 +1632,7 @@ A demo test must give the same pixels on every run.
 
 | What | How it is pinned |
 |------|------------------|
-| Data | The stub GitHub API and fixture repositories from section 11.2, never live GitHub. The fixtures (`DemoFixtures`) model real cases under neutral names (section 13.3): `acme/agent-skills` has ordinary skills, `acme/workbench` has copies in `.agents` and `.claude` plus product copies, and `acme/agent-framework` has test fixtures. Git dates are fixed, so commit SHAs never change. |
+| Data | The stub GitHub API and fixture repositories from section 11.2, never live GitHub. The fixtures (`DemoFixtures`) model real cases under neutral names (section 13.3): `acme/agent-skills` has ordinary skills, `acme/workbench` has copies in `.agents` and `.claude` plus product copies, and `acme/agent-framework` has test fixtures. `acme` is also an organization that lists all three, plus a fork, an archived repository and one without skills (5.12). Git dates are fixed, so commit SHAs never change. |
 | Web browser | Playwright for Java, at the Chromium version its pinned release ships. Viewport 1280×800, device scale factor 1, light color scheme, locale `en-US`, time zone `UTC`. Animations disabled, and the text caret hidden in screenshots. |
 | Fonts | Inter (text) and JetBrains Mono (code), both SIL OFL, are committed in `src/integrationTest/resources/fonts/`. Web tests inject them with an `@font-face` style that overrides the page fonts (Playwright's `bypassCSP` allows this in tests only). Terminal tapes use `Set FontFamily "JetBrains Mono"`, installed from the same files. |
 | Terminal | VHS, with `ttyd` and `ffmpeg`, at pinned versions. 1400×820, font size 16, `Set Framerate 20`, and a fixed theme. A key moment that follows a command waits for the command's output with `Wait+Screen /…/`
@@ -1491,6 +1715,15 @@ proves. The spec section and acceptance criterion it covers are in brackets.
 | `04-starred-words` | Add ` word` to the filter | `is:starred` combines with words: only `docx-editor` (5.5, 5.11) |
 | `05-after-reload` | Esc, reload, starred-only | Stars are saved, and survive a reload (5.11, AC 27) |
 
+**Web view: `web-org`** on the organization `acme`
+
+| Moment | Step | Proves |
+|--------|------|--------|
+| `01-owner-chip` | Enter `github.com/acme/agent-skills github.com/acme`, then Scan | One chip for the owner next to the repository's own chip; `acme/agent-skills`, given twice, is scanned once; every repository with skills has a row and a group (5.12, AC 28, AC 29, AC 30) |
+| `02-searched` | Scroll to the owner lines | `Searched acme: 3 of 4 repositories have skills (2 forks or archived skipped)`, and the website without skills isn't reported (5.12, AC 28) |
+| `03-search-across` | Type `pdf` | The filter works across the owner's repositories (5.10, 5.12) |
+| `04-owner-removed` | Esc, then remove the owner chip | The owner's repositories are dropped; `acme/agent-skills`, given on its own, stays (5.12, AC 30) |
+
 **Terminal (VHS): `cli`**
 
 | Moment | Step | Proves |
@@ -1520,6 +1753,14 @@ proves. The spec section and acceptance criterion it covers are in brackets.
 | `03-narrowed` | `sc` | Ranking and highlighting (5.9) |
 | `04-scanned` | Tab, the URL, Enter | `/scan` output in the scrollback (5.9, AC 21) |
 | `05-skill-completion` | `/skill pdf`, Tab | Skill-name completion (5.9, AC 21) |
+
+**Terminal: `org`** on the organization `acme`
+
+| Moment | Step | Proves |
+|--------|------|--------|
+| `01-searched` | `scan github.com/acme`, grepped to its `Repository`, `Searched` and `Scanned` lines | The three repositories with skills, in name order, and the `Searched` line (5.12, AC 28) |
+| `02-mixed` | `scan github.com/acme/agent-skills github.com/acme --filter pdf`, grepped the same way | The repository given on its own comes first and is scanned once; the filter summary (5.12, AC 29) |
+| `03-one-repository` | `browse github.com/acme` | The error for an owner URL in a command that works on one repository (5.12, AC 31) |
 
 A new feature that users can see adds a demo, or key moments, to this table. It also adds
 the matching baselines, in the same pull request.

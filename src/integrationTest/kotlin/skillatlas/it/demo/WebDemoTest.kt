@@ -238,6 +238,45 @@ class WebDemoTest {
         }
     }
 
+    @Test
+    fun `web-org`() {
+        val lines = listOf(
+            "Not just a repository. Paste a whole organization, next to one of its repositories.",
+            "Skill Atlas lists the organization, checks each repository for skill files, and clones only those.",
+            "One chip for the organization. Agent skills was given twice, so it's scanned once.",
+            "Here's what was searched. The fork and the archived repository are skipped.",
+            "Search runs across all of them at once.",
+            "Remove the organization, and its repositories go with it. The one given on its own stays.",
+        )
+        WebDemo("web-org", browser, lines).use { demo ->
+            val page = demo.page
+            page.navigate(web.url)
+            demo.idle()
+            demo.say(lines[0])
+            demo.type("#url", "github.com/${DemoFixtures.SKILLS} github.com/${DemoFixtures.OWNER}", 30.0)
+            page.click("#scan-button")
+            demo.say(lines[1])
+            demo.idle()
+            demo.say(lines[2])
+            demo.moment("01-owner-chip")
+
+            page.locator("#owner-lines").scrollIntoViewIfNeeded()
+            demo.say(lines[3])
+            demo.moment("02-searched")
+
+            demo.type("#filter", "pdf", 110.0)
+            demo.say(lines[4])
+            demo.moment("03-search-across")
+
+            page.locator("#filter").press("Escape")
+            page.evaluate("() => window.scrollTo(0, 0)")
+            page.locator(".chip.owner .chip-remove").click()
+            demo.idle()
+            demo.say(lines[5])
+            demo.moment("04-owner-removed")
+        }
+    }
+
     companion object {
         private lateinit var playwright: Playwright
         private lateinit var browser: Browser
