@@ -87,8 +87,40 @@ testing {
                     )
                     systemProperty("skillAtlas.version", project.version.toString())
                     shouldRunAfter(tasks.test)
+                    // Demo tests (spec section 13) run only in their own task, on CI.
+                    useJUnitPlatform { excludeTags("demo") }
                 }
             }
+        }
+    }
+}
+
+// Demo tests (spec section 13): narrated recordings plus key-moment screenshots compared with
+// the baselines in src/integrationTest/baselines. They run on CI only, where fonts and rendering
+// match the baselines; -PupdateScreenshots writes new baselines instead of comparing.
+val demoTest by tasks.registering(Test::class) {
+    description = "Records the demos and compares their key moments with the baselines (CI only)."
+    group = "verification"
+    val integrationTest = sourceSets.named("integrationTest")
+    testClassesDirs = integrationTest.get().output.classesDirs
+    classpath = integrationTest.get().runtimeClasspath
+    useJUnitPlatform { includeTags("demo") }
+    val installDist = tasks.installDist
+    dependsOn(installDist, installPlaywrightChromium)
+    environment("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")
+    systemProperty("skillAtlas.launcher", installDist.get().destinationDir.resolve("bin/skill-atlas").absolutePath)
+    systemProperty("skillAtlas.version", project.version.toString())
+    systemProperty("skillAtlas.repoRoot", rootDir.absolutePath)
+    systemProperty("skillAtlas.updateScreenshots", providers.gradleProperty("updateScreenshots").isPresent.toString())
+    outputs.upToDateWhen { false }
+    val onCi = providers.environmentVariable("CI").orNull == "true"
+    val allowed = providers.gradleProperty("allowLocalDemos").isPresent
+    doFirst {
+        if (!onCi && !allowed) {
+            throw GradleException(
+                "Demo tests run on CI only (spec section 13): baselines match the CI runner's rendering. " +
+                    "Use -PallowLocalDemos to try one locally; its screenshots won't match.",
+            )
         }
     }
 }

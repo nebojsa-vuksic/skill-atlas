@@ -15,7 +15,8 @@ permissions:
 
 jobs:
   update:
-    runs-on: ubuntu-latest
+    # The same pinned image as the Demos job (spec 13.1).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:

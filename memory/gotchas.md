@@ -226,6 +226,40 @@ compositing.
 release. Each line takes about 1.3 s to render once the model is loaded, so load it once
 per demo (`kokoro_say.py` reads JSON on stdin).
 
+## VHS Wait+Screen reads the top of the buffer, and Screenshot is async (2026-09-30)
+
+With a program that prints scrollback (the shell), `Wait+Screen /x/` timed out on text
+near the bottom. Its error showed the first buffer line ("last value was: $ skill-atlas").
+`Wait` (line mode) saw an empty line. A `Screenshot` followed at once by `Type` captured
+the next keystroke.
+
+**How to apply:** `clear` before commands whose output you wait on. After in-process keys,
+use a short `Sleep`. Put `Sleep 1s` after every `Screenshot`. The shell palette shows at
+most 8 rows, so `/help` isn't visible after typing `/`.
+
+## Unquoted YAML descriptions containing ": " become invalid frontmatter (2026-09-30)
+
+"Use when defining generators: templates, …" parsed as a new key, and the skill showed
+`⚠ invalid frontmatter`. The parser was right, and the demo fixtures were wrong.
+
+**How to apply:** quote descriptions in fixtures, as `DemoFixtures.skill()` does.
+
+## GitHub Actions pushes with GITHUB_TOKEN don't start workflows (2026-09-30)
+
+The Update screenshots workflow commits baselines and then must start CI itself.
+
+**How to apply:** use `gh workflow run ci.yml --ref <branch>`, which needs
+`permissions: actions: write`. `ci.yml` has `workflow_dispatch` for this.
+
+## "No space left on device" from ffmpeg 6.x is not about disk (2026-10-01)
+
+On Ubuntu's ffmpeg 6.1, `amix,apad` with `-shortest` failed with `Error while filtering: No
+space left on device` while 30 GB were free. ffmpeg 9 on the Mac was fine. We first freed
+disk space, which didn't help.
+
+**How to apply:** pad audio to an explicit length (`apad=whole_dur=<s>`) and cut with
+`-t <s>`, never `-shortest`. Check `df -h` before blaming the disk.
+
 ## The JetBrains Air Linux sandbox blocks most downloads (2026-10-01)
 
 Only Java 25 is installed; foojay, `dl.google.com` (Mosaic's AndroidX) and Playwright's CDN
@@ -264,3 +298,25 @@ and passed three times in a row alone.
 
 **How to apply:** check `uptime` and rerun on a quiet machine; never raise the limit.
 
+
+## "The job was not started because recent account payments have failed" (2026-10-01)
+
+Every Actions job on every branch, `main` included, failed with no steps. The check-run
+annotation said: "The job was not started because recent account payments have failed or
+your spending limit needs to be increased." It was billing, not code. Before that, every PR
+ran CI twice (`push` plus `pull_request`), with macOS at ten times the Linux rate and a
+12-minute Demos job.
+
+**How to apply:** when jobs fail with no steps, read the annotations
+(`gh api repos/<repo>/check-runs/<id>/annotations`) before debugging. Only the owner can fix
+billing. CI now runs `push` for `main` only, macOS only on `main`, and cancels a PR's older
+in-progress run.
+
+## The Demos runner is pinned to ubuntu-24.04 (2026-10-01)
+
+`ubuntu-latest` moves to Ubuntu 26 on 2026-10-19 (annotation on every run). A new image's
+fonts and libraries would change every screenshot at once.
+
+**How to apply:** the Demos job and Update screenshots use `ubuntu-24.04`. Moving to a new
+image is a separate PR: change both `runs-on` lines, run Update screenshots, and review the
+diffs.

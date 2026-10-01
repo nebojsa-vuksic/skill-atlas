@@ -150,6 +150,21 @@ linked from the README (spec 13.5).
 **How to apply:** when a feature changes what users see, update or add a tour demo, record
 it again, and republish with `demo/publish.sh tour …`.
 
+## Demos are CI-only deterministic tests with screenshot baselines (2026-09-30)
+
+Local recording is gone. `./gradlew demoTest` (CI only) runs six demo tests on fixture data.
+Each records a narrated video and compares 33 key-moment screenshots with
+`src/integrationTest/baselines/` (tolerance: 16 per channel, 0.1 % of pixels). Only
+`demos/latest/` is published, as a single force-pushed orphan commit. Intended UI changes
+go through the Update screenshots workflow (spec 13).
+
+**Why:** the owner wanted recordings only on CI, the current state always published and
+never a stale one, and screenshots of key moments compared on every run to catch
+regressions. They chose baselines in the repo, updated by CI, over comparing against the
+last run on `main`.
+**How to apply:** never commit baselines made on a Mac; fonts render differently. A UI
+change means updating spec 13.3, then the demo, then running the workflow.
+
 ## The PR review automation's instructions live in the repo (2026-10-01)
 
 The JetBrains Air Teams PR review automation is set up in the web UI, with triggers

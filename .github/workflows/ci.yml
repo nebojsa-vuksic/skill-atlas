@@ -1,9 +1,18 @@
 name: CI
 
+# Actions minutes are billed for this private repository, so CI runs each change once:
+# pull requests through `pull_request`, `main` through `push`, and the Update screenshots
+# workflow through `workflow_dispatch`. Branches are checked when they have a PR (spec 11.3).
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+# A newer push to the same pull request cancels its older run that is still going.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -11,7 +20,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # macOS minutes cost ten times Linux ones: pull requests build on Linux, `main` on both.
+        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -45,3 +55,54 @@ jobs:
           path: |
             build/reports/tests/
             build/test-results/
+
+  demos:
+    # Demo tests (spec section 13): narrated recordings and key-moment screenshot comparison.
+    name: Demos
+    # Pinned: baselines are only valid for one image's fonts and libraries (spec 13.1).
+    # Moving to a newer image is a deliberate change with re-recorded baselines.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: demos-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/demo-setup
+
+      - name: Record demos and compare key moments with the baselines
+        run: ./gradlew demoTest --no-daemon
+
+      - name: Narrate and encode the videos
+        if: always()
+        run: |
+          # VHS leaves its frame files behind; they're not needed once the .webm exists.
+          rm -rf /tmp/vhs* 2>/dev/null || true
+          df -h /
+          demo/finish-all.sh
+
+      - name: Upload the demos, screenshots and any diffs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demos
+          if-no-files-found: ignore
+          path: |
+            build/demo/*/*.mp4
+            build/demo/*/*.gif
+            build/demo/*/screenshots/
+            build/demo/*/expected/
+            build/demo/*/diff/
+            build/reports/tests/demoTest/
+
+      - name: Publish the latest demos to the demos branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEMO_SOURCE: ${{ github.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          demo/publish.sh latest $(cd build/demo && ls -d */ | tr -d /)

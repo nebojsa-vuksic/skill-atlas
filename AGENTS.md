@@ -12,9 +12,11 @@ Instructions for AI agents working in this repository. Humans are welcome to rea
   trap and its fix, or a change in how we work. Commit it in the same PR as the change.
 - **Read the spec first:** `specs/spec.md` is the source of truth for behavior. Change the
   spec before, or together with, the code.
-- **Every PR follows `.github/pull_request_template.md`.** When users can see the change,
-  record a scripted demo with the `record-demo` skill (`.agents/skills/record-demo/SKILL.md`)
-  and embed it in the PR (spec section 13).
+- **Every PR follows `.github/pull_request_template.md`.** CI's **Demos** job records every
+  demo and compares key-moment screenshots with baselines (spec section 13). When users can
+  see the change, update the demo tests with the `record-demo` skill
+  (`.agents/skills/record-demo/SKILL.md`). Demos are recorded only on CI; never commit
+  baselines made on your own machine.
 
 ## Project
 
@@ -31,6 +33,7 @@ Kotlin/JVM CLI with four commands:
 ./gradlew test                        # unit tests only
 ./gradlew integrationTest             # runs the installed launcher; needs git and python3
 ./gradlew installDist                 # then: build/install/skill-atlas/bin/skill-atlas <command>
+./gradlew demoTest                    # CI only: demo videos + screenshot comparison (spec section 13)
 GITHUB_TOKEN=$(gh auth token) build/install/skill-atlas/bin/skill-atlas scan https://github.com/anthropics/skills
 ```
 

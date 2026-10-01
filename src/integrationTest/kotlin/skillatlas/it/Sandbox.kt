@@ -153,7 +153,8 @@ class Sandbox(private val root: Path) : AutoCloseable {
         return CliRun(process.exitValue(), stdout, stderr)
     }
 
-    private fun cliEnvironment(): Map<String, String> {
+    /** The environment the CLI runs with: the stubs, isolated state, and pinned git settings. */
+    fun cliEnvironment(): Map<String, String> {
         val inherited = System.getenv().filterKeys { it in INHERITED_VARIABLES }
         return inherited + FIXED_GIT_ENVIRONMENT + mapOf(
             "SKILL_ATLAS_GITHUB_API_URL" to api.url,

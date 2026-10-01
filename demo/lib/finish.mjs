@@ -38,34 +38,42 @@ if (lines.length > 0) {
   await browser.close();
 }
 
+const voiced = lines.filter((line) => line.file && existsSync(line.file));
 const inputs = ["-i", raw];
 const filters = [];
 let video = "0:v";
 const recorded = parseFloat(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", raw]).toString());
+let length = recorded;
 if (trueLength && recorded < parseFloat(trueLength) * 0.97) {
+  length = parseFloat(trueLength);
   const factor = (parseFloat(trueLength) / recorded).toFixed(4);
   console.log(`finish: the recording is ${recorded.toFixed(1)} s but the tape runs ${trueLength} s; stretching by ${factor}`);
   filters.push(`[0:v]setpts=PTS*${factor}[stretched]`);
   video = "stretched";
 }
-lines.forEach((line, i) => inputs.push("-i", line.file));
+voiced.forEach((line) => inputs.push("-i", line.file));
 captions.forEach((file) => inputs.push("-i", file));
 captions.forEach((_, i) => {
   const from = lines[i].at.toFixed(2);
   const to = (lines[i].at + lines[i].duration + 0.3).toFixed(2);
   const out = `v${i + 1}`;
-  filters.push(`[${video}][${1 + lines.length + i}:v]overlay=x=(W-w)/2:y=H-h-${Math.round(width / 40)}:enable='between(t,${from},${to})'[${out}]`);
+  filters.push(`[${video}][${1 + voiced.length + i}:v]overlay=x=(W-w)/2:y=H-h-${Math.round(width / 40)}:enable='between(t,${from},${to})'[${out}]`);
   video = out;
 });
-if (lines.length > 0) {
-  lines.forEach((line, i) => {
+if (voiced.length > 0) {
+  voiced.forEach((line, i) => {
     const ms = Math.round(line.at * 1000);
     filters.push(`[${i + 1}:a]adelay=${ms}:all=1[a${i + 1}]`);
   });
-  filters.push(lines.map((_, i) => `[a${i + 1}]`).join("") + `amix=inputs=${lines.length}:normalize=0:dropout_transition=0,apad[audio]`);
+  // Pad the voice to exactly the video's length. `apad` without a length plus `-shortest` makes
+  // ffmpeg 6.x (Ubuntu's) fail with a bogus "No space left on device".
+  filters.push(voiced.map((_, i) => `[a${i + 1}]`).join("") +
+    `amix=inputs=${voiced.length}:normalize=0:dropout_transition=0,apad=whole_dur=${length.toFixed(3)}[audio]`);
 }
 
-const map = lines.length > 0 ? ["-map", `[${video}]`, "-map", "[audio]", "-shortest", "-c:a", "aac", "-b:a", "128k"] : ["-map", "0:v"];
+const map = voiced.length > 0
+  ? ["-map", `[${video}]`, "-map", "[audio]", "-t", length.toFixed(3), "-c:a", "aac", "-b:a", "128k"]
+  : ["-map", video === "0:v" ? "0:v" : `[${video}]`];
 ffmpeg([...inputs, ...(filters.length ? ["-filter_complex", filters.join(";")] : []), ...map,
   "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4]);
 ffmpeg(["-i", mp4, "-vf",

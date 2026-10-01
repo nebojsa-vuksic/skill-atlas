@@ -17,8 +17,8 @@ A change is done when all of the following hold (spec section 12):
 1. `./gradlew build` passes locally, with no skipped tests. That includes unit tests,
    integration tests, pseudo-terminal tests, and browser tests.
 2. A PR is open, created with `gh pr create --base main`.
-3. CI is green on the PR's **latest** commit, for both the `push` and `pull_request` runs,
-   on Ubuntu and macOS.
+3. CI is green on the PR's **latest** commit, in its `pull_request` run (Linux build and
+   Demos). macOS runs only on `main`, so check `main` after merging.
 4. The PR is merged with `gh pr merge <n> --merge --delete-branch`, and CI on `main` is green
    afterwards.
 
@@ -64,3 +64,14 @@ terminal views, drive them in a pty.
 
 **Why:** real runs caught the 40 s clone, the 20-column description bug under `script`,
 lost indentation in `browse`, and a no-match message pushed out of view.
+
+## Parallel features: reserve spec section numbers up front (2026-10-01)
+
+Stars (#18) and organization scans (#16) were built in parallel, and both added spec section
+5.11 and acceptance criteria 25 onward. Git merged the code without conflicts, but about 60
+`spec section 5.11` comments and test names then meant two different things.
+
+**Why:** the second PR to merge had to renumber to 5.12 and AC 28–31 in about 20 files.
+**How to apply:** give each brief its own section and criteria numbers. When merging
+anyway, renumber only the lines the second branch *added* (`git diff <merge-base> <branch>`),
+so the first feature's references stay as they are.

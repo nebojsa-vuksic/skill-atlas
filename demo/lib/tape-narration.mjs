@@ -17,6 +17,8 @@ function seconds(value) {
 }
 
 let typing = 0.05; // VHS's default TypingSpeed
+// A Wait lasts as long as the command takes, mostly the JVM starting; count it as this estimate.
+const WAIT_ESTIMATE = 1.0;
 let time = 0;
 let recording = true;
 const lines = [];
@@ -36,6 +38,7 @@ for (const raw of readFileSync(tape, "utf8").split("\n")) {
   else if (name === "Hide") recording = false;
   else if (name === "Show") recording = true;
   else if (name === "Sleep") add(seconds(rest[0]));
+  else if (name.startsWith("Wait")) add(WAIT_ESTIMATE);
   else if (name === "Type") {
     const text = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"'));
     add(text.length * pace);

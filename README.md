@@ -13,19 +13,22 @@ skill-atlas star <github-project-url> <skill>    # mark a favourite; unstar remo
 
 ## Demos
 
-A narrated tour of every feature, recorded from scripts in `demo/tour-*/` (spec section
-13.5). The videos have a voice-over and the GIFs have captions. They live on the `demos`
-branch, so viewing them needs access to this private repository.
+Every feature has a demo test (spec section 13). On every run, CI records a narrated video of
+it and compares screenshots of its key moments with committed baselines. The latest `main`
+recordings are published to the `demos` branch, which holds nothing older. Viewing them
+needs access to this private repository.
 
 | Video | Shows | |
 |-------|-------|-|
-| [tour-web-basics](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-basics/web.mp4) | Scanning a repository, the split pane, the Raw tab, the divider, similar skills | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-basics/web.gif?raw=true) |
-| [tour-web-search](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-search/web.mp4) | JetBrains/MPS duplicates and product skills, the filter, snippets, Esc, the URL state | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-search/web.gif?raw=true) |
-| [tour-web-multi](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-multi/web.mp4) | Three repositories, grouped lists, `repo:` search, similar skills across repositories | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-web-multi/web.gif?raw=true) |
-| [tour-cli](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-cli/terminal.mp4) | `scan` rich and plain, merged copies, fixtures, `--filter`, `--skill`, several repositories | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-cli/terminal.gif?raw=true) |
-| [tour-browse](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-browse/terminal.mp4) | `browse`: moving, the live filter, similar skills, quitting | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-browse/terminal.gif?raw=true) |
-| [tour-shell](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-shell/terminal.mp4) | The shell: the palette, Tab completion, `/scan`, `/filter`, `/skill`, `/log` | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/tour/tour-shell/terminal.gif?raw=true) |
-| [tour-stars](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/pr-18/web.mp4) | Starring skills: the star button, `s`, the starred-only filter, stars kept after a reload | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/pr-18/web.gif?raw=true) |
+| [web-basics](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-basics/web.mp4) | Scanning, the split pane, Raw, the divider, similar skills | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-basics/web.gif?raw=true) |
+| [web-search](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-search/web.mp4) | Merged copies, product skills, the filter, snippets, URL state | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-search/web.gif?raw=true) |
+| [web-multi](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-multi/web.mp4) | Three repositories, `repo:` search, similar skills across repositories | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-multi/web.gif?raw=true) |
+| [web-stars](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-stars/web.mp4) | Starring with the button and `s`, the starred-only filter, stars kept after a reload | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-stars/web.gif?raw=true) |
+| [web-org](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-org/web.mp4) | An organization and one of its repositories: the owner chip, the `Searched` line, removing the owner | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/web-org/web.gif?raw=true) |
+| [cli](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/cli/terminal.mp4) | `scan` rich and plain, merged copies, fixtures, `--skill`, several repositories | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/cli/terminal.gif?raw=true) |
+| [browse](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/browse/terminal.mp4) | `browse`: moving, filtering, similar skills | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/browse/terminal.gif?raw=true) |
+| [shell](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/shell/terminal.mp4) | The shell: palette, `/scan`, skill-name completion | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/shell/terminal.gif?raw=true) |
+| [org](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/org/terminal.mp4) | `scan` of an organization, mixed with a repository, and `browse` refusing one | [GIF](https://github.com/nebojsa-vuksic/skill-atlas/blob/demos/demos/latest/org/terminal.gif?raw=true) |
 
 ## Requirements
 
@@ -67,12 +70,12 @@ with a `Searched <owner>: <k> of <n> repositories have skills` line. Owner URLs 
 repository URLs, and the web view shows an owner as one chip. It makes about one API
 request per repository, so set `GITHUB_TOKEN`. See spec section 5.12.
 
-### Demos for pull requests
+### Demo tests and screenshots
 
-`demo/record.sh <name>` records the scripted demo in `demo/<name>/` (Playwright for the web
-view, VHS for the terminal), with a local neural voice-over (Kokoro) and captions, into
-`build/demo/<name>/`. `demo/publish.sh <pr> <name>` pushes
-it to the `demos` branch and prints the Markdown for the PR. See spec section 13.
+`./gradlew demoTest` runs on CI only. It records every demo and compares its key moments
+with `src/integrationTest/baselines/`. When a UI change is intended, run the **Update
+screenshots** workflow for your branch. It commits new baselines that reviewers see in the
+PR. See spec section 13.
 
 ### Filter, skill details and interactive browsing
 
