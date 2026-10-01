@@ -39,13 +39,14 @@ class ShellSessionTest {
     private val started = mutableListOf<WebServer.Running>()
 
     private val scanLog by lazy { ScanLog(dir.resolve("state/scans.log")) }
+    private val stars by lazy { StarStore(dir.resolve("data/stars.json")) }
 
     // Nothing here scans: /scan only asks the view to scan in the background.
     private val scanner = Scanner(GitHubClient(apiBaseUrl = "http://127.0.0.1:9"), Git())
 
     private fun session(startWebView: (Int, (String) -> Unit) -> WebServer.Running = { port, warn ->
-        WebServer(scanner, scanLog, clock, warn).start(port).also { started += it }
-    }) = ShellSession(scanner, scanLog, clock, startWebView)
+        WebServer(scanner, scanLog, stars, clock, warn).start(port).also { started += it }
+    }) = ShellSession(scanner, scanLog, stars, clock, startWebView)
 
     private fun scanned(session: ShellSession = session()) = session.also { it.adopt(CurrentRepository(result, similar)) }
 
@@ -57,7 +58,7 @@ class ShellSessionTest {
     @Test
     fun `commands that need a repository say so until there is one`() {
         val session = session()
-        for (input in listOf("/filter x", "/skill a", "/similar a", "/browse", "/repo", "pdf")) {
+        for (input in listOf("/filter x", "/skill a", "/similar a", "/star a", "/unstar a", "/browse", "/repo", "pdf")) {
             assertEquals(listOf(ShellSession.NO_REPOSITORY), blocks(session.execute(input)), input)
         }
         assertEquals("No repository yet — run /scan <url> first.", ShellSession.NO_REPOSITORY.text)
@@ -96,7 +97,7 @@ class ShellSessionTest {
     @Test
     fun `a scan log that can't be written is a warning`() {
         val blocked = dir.resolve("blocked").also { it.writeText("a file") }
-        val session = ShellSession(scanner, ScanLog(blocked.resolve("scans.log")), clock) { _, _ -> error("unused") }
+        val session = ShellSession(scanner, ScanLog(blocked.resolve("scans.log")), stars, clock) { _, _ -> error("unused") }
 
         val blocks = session.adopt(CurrentRepository(result, similar))
 
@@ -144,6 +145,64 @@ class ShellSessionTest {
         assertEquals(listOf(ShellBlock.Repository(result)), blocks(session.execute("/repo")))
         assertEquals(listOf(ShellBlock.Help), blocks(session.execute("/HELP")))
         assertEquals(ShellOutcome.Quit, session.execute("/quit"))
+    }
+
+    @Test
+    fun `star and unstar change the stars file and say what they did`() {
+        val session = scanned()
+
+        val starred = assertIs<Presentation.StarChanged>(assertIs<ShellBlock.Report>(blocks(session.execute("/star MPS-TESTS")).single()).presentation)
+        assertEquals("Starred mps-tests (acme/skills:skills/mps-tests).", starred.message)
+        assertEquals(listOf("acme/skills:skills/mps-tests"), stars.read().map { it.id })
+        val again = assertIs<ShellBlock.Report>(blocks(session.execute("/star skills/mps-tests")).single()).presentation
+        assertEquals("mps-tests is already starred (acme/skills:skills/mps-tests).", assertIs<Presentation.StarChanged>(again).message)
+
+        val unstarred = assertIs<ShellBlock.Report>(blocks(session.execute("/unstar mps-tests")).single()).presentation
+        assertEquals("Unstarred mps-tests (acme/skills:skills/mps-tests).", assertIs<Presentation.StarChanged>(unstarred).message)
+        assertEquals(emptyList(), stars.read())
+
+        assertEquals(listOf(ShellBlock.Error("no skill 'nope' in acme/skills")), blocks(session.execute("/star nope")))
+        assertEquals(listOf(ShellBlock.Error("usage: /star <name-or-path>")), blocks(session.execute("/star")))
+        assertEquals(listOf(ShellBlock.Error("usage: /unstar <name-or-path>")), blocks(session.execute("/unstar ")))
+    }
+
+    @Test
+    fun `stars lists every star, even without a repository`() {
+        val session = session()
+        assertEquals(listOf(ShellBlock.Report(Presentation.StarList(emptyList()))), blocks(session.execute("/stars")))
+
+        stars.star("other/repo", Skill("docx", "", "skills/docx"))
+        assertEquals(
+            listOf(ShellBlock.Report(Presentation.StarList(listOf(Star("other/repo", "skills/docx", "docx"))))),
+            blocks(session.execute("/stars")),
+        )
+    }
+
+    @Test
+    fun `skills are shown with stars changed elsewhere`() {
+        val session = scanned()
+        // As if starred in the web view or by another process after the scan.
+        stars.star("ACME/skills", skills[2])
+
+        val list = assertIs<Presentation.SkillList>(assertIs<ShellBlock.Report>(blocks(session.execute("/filter is:starred")).single()).presentation)
+        assertEquals(listOf("commits"), list.skills.map { it.name })
+        val detail = assertIs<Presentation.SkillDetail>(assertIs<ShellBlock.Report>(blocks(session.execute("/skill commits")).single()).presentation)
+        assertTrue(detail.skill.starred)
+        val browse = assertIs<ShellOutcome.Browse>(session.execute("/browse"))
+        assertEquals(listOf(false, false, true), browse.state.result.skills.map { it.starred })
+    }
+
+    @Test
+    fun `a stars file that can't be read warns in yellow and shows no stars`() {
+        val session = scanned()
+        val file = dir.resolve("data/stars.json").also { it.parent.createDirectories(); it.writeText("{broken") }
+
+        val blocks = blocks(session.execute("/filter"))
+
+        assertEquals(ShellBlock.Message("warning: could not read stars $file: not valid stars JSON", Look.WARNING), blocks.first())
+        assertEquals(Presentation.SkillList(result, null), assertIs<ShellBlock.Report>(blocks.last()).presentation)
+        assertEquals(listOf(ShellBlock.Error("could not read stars $file: not valid stars JSON")), blocks(session.execute("/stars")))
+        assertEquals(listOf(ShellBlock.Error("could not read stars $file: not valid stars JSON")), blocks(session.execute("/star commits")))
     }
 
     @Test
@@ -195,7 +254,7 @@ class ShellSessionTest {
     @Test
     fun `closing the session stops the web view`() {
         var port = 0
-        val session = session { p, warn -> WebServer(scanner, scanLog, clock, warn).start(p).also { port = it.port } }
+        val session = session { p, warn -> WebServer(scanner, scanLog, stars, clock, warn).start(p).also { port = it.port } }
         session.execute("/serve 0")
         session.close()
 

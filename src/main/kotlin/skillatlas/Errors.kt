@@ -31,7 +31,7 @@ class RepositoryNotFoundException(repository: RepoCoordinates) :
 class OwnerNotFoundException(login: String) :
     SkillAtlasException("organization or user $login not found", ExitCode.REPOSITORY_NOT_FOUND)
 
-/** An owner URL given to something that works on one repository: `browse`, the shell's `/scan`, `/api/scan` (spec section 5.11). */
+/** An owner URL given to something that works on one repository: `browse`, the shell's `/scan`, `/api/scan` (spec section 5.12). */
 class OwnerUrlNotSupportedException(url: String) :
     SkillAtlasException(
         "${url.trim()} names an organization or user, not a repository; use \"skill-atlas scan ${url.trim()}\" to search its repositories",
@@ -74,6 +74,10 @@ class AmbiguousSkillException(selector: String, paths: List<String>) :
         "skill name '$selector' matches ${paths.size} skills: ${paths.joinToString(", ")}; pass a path instead",
         ExitCode.USAGE,
     )
+
+/** The stars file can't be read or saved (spec section 5.11). */
+class StarsFileException(message: String, cause: Throwable? = null) :
+    SkillAtlasException(message, ExitCode.INTERNAL_ERROR, cause)
 
 class NotATerminalException(command: String) :
     SkillAtlasException("$command needs an interactive terminal; use \"skill-atlas scan\" instead", ExitCode.USAGE)

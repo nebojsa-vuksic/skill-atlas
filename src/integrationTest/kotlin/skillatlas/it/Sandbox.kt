@@ -36,6 +36,7 @@ class Sandbox(private val root: Path) : AutoCloseable {
     private val repositories = root.resolve("repositories").createDirectories()
     private val workTrees = root.resolve("work").createDirectories()
     private val stateHome = root.resolve("state").createDirectories()
+    private val dataHome = root.resolve("data").createDirectories()
     private val tempDir = root.resolve("tmp").createDirectories()
 
     val api = StubGitHubApi()
@@ -43,6 +44,9 @@ class Sandbox(private val root: Path) : AutoCloseable {
     val scanLog: Path get() = stateHome.resolve("skill-atlas/scans.log")
 
     fun scanLogLines(): List<String> = if (scanLog.exists()) scanLog.readLines() else emptyList()
+
+    /** The stars file (spec section 5.11); every test starts without one. */
+    val starsFile: Path get() = dataHome.resolve("skill-atlas/stars.json")
 
     /** Clone directories the CLI left behind in its temp directory. */
     fun leftoverCloneDirectories(): List<String> =
@@ -155,6 +159,7 @@ class Sandbox(private val root: Path) : AutoCloseable {
             "SKILL_ATLAS_GITHUB_API_URL" to api.url,
             "SKILL_ATLAS_GIT_BASE_URL" to repositories.toUri().toString().trimEnd('/'),
             "XDG_STATE_HOME" to stateHome.toString(),
+            "XDG_DATA_HOME" to dataHome.toString(),
             "JAVA_OPTS" to "-Djava.io.tmpdir=$tempDir",
             "TERM" to "xterm-256color",
         )
@@ -215,6 +220,13 @@ class WebView(val url: String, private val process: Process) : AutoCloseable {
     fun post(path: String): Response = send(
         java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + path.removePrefix("/")))
             .POST(java.net.http.HttpRequest.BodyPublishers.noBody()),
+    )
+
+    /** POSTs [body] with [headers], e.g. a `Content-Type` or an `Origin`. */
+    fun post(path: String, body: String, vararg headers: Pair<String, String>): Response = send(
+        java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + path.removePrefix("/")))
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+            .apply { for ((name, value) in headers) header(name, value) },
     )
 
     /** Sends a raw request with a custom Host header, which the JDK HTTP client refuses to set. */
@@ -284,7 +296,7 @@ class StubGitHubApi : AutoCloseable {
     /** Every request path, with its query string, in the order the stub got them. */
     fun requests(): List<String> = synchronized(received) { received.toList() }
 
-    /** A repository as an owner's repository list shows it (spec section 5.11). */
+    /** A repository as an owner's repository list shows it (spec section 5.12). */
     class Listed(val name: String, val description: String? = null, val fork: Boolean = false, val archived: Boolean = false)
 
     /** An organization or user with [repositories], served 100 per page like GitHub, sorted the way it was given. */

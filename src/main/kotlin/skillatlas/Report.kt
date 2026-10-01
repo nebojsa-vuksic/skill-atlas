@@ -39,7 +39,20 @@ object TextReport {
                 for (owner in presentation.owners) appendLine(owner.line)
                 appendLine(presentation.summary)
             }
+            is Presentation.StarChanged -> appendLine(presentation.message)
+            is Presentation.StarList -> starList(presentation)
         }
+    }
+
+    private fun StringBuilder.starList(list: Presentation.StarList) {
+        if (list.stars.isEmpty()) {
+            appendLine(list.heading)
+            return
+        }
+        appendLine("${list.heading}:")
+        appendLine()
+        val width = list.stars.maxOf { sanitize(it.name).length }
+        for (star in list.stars) appendLine("  ${sanitize(star.name).padEnd(width)}  ${sanitize(star.id)}")
     }
 
     private fun StringBuilder.header(result: ScanResult) {
@@ -106,6 +119,7 @@ object TextReport {
     }
 
     private fun StringBuilder.tags(skill: Skill) {
+        if (skill.starred) append("  [$STARRED_LABEL]")
         if (skill.shipped) append("  [$SHIPPED_LABEL]")
         if (skill.warnings.isNotEmpty()) append("  [warning: ${skill.warnings.joinToString(", ")}]")
     }
@@ -120,6 +134,8 @@ object TextReport {
 const val MAX_DESCRIPTION_LENGTH = 100
 
 const val SHIPPED_LABEL = "shipped in product"
+
+const val STARRED_LABEL = "starred"
 
 /** Between repositories when `scan` is given several URLs (spec section 5.10). */
 val REPOSITORY_SEPARATOR = "─".repeat(80)

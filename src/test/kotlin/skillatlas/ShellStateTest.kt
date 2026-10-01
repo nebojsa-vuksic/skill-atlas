@@ -210,7 +210,7 @@ class ShellStateTest {
         state.type("/")
         assertEquals(ShellCommands.ALL.size, state.palette.size)
         state.type("s")
-        assertEquals(listOf("scan", "skill", "similar", "serve", "browse"), state.paletteNames)
+        assertEquals(listOf("scan", "skill", "similar", "star", "stars", "serve", "unstar", "browse"), state.paletteNames)
         state.type("e")
         // "browse" contains "se", so it follows the prefix match.
         assertEquals(listOf("serve", "browse"), state.paletteNames)
@@ -222,10 +222,10 @@ class ShellStateTest {
         state.type("/s")
         state.onKey("ArrowUp")
         assertEquals(0, state.selection)
-        repeat(6) { state.onKey("ArrowDown") }
-        assertEquals(4, state.selection)
+        repeat(9) { state.onKey("ArrowDown") }
+        assertEquals(7, state.selection)
         state.onKey("ArrowUp")
-        assertEquals(3, state.selection)
+        assertEquals(6, state.selection)
 
         state.type("i")
         assertEquals(0, state.selection)
@@ -259,7 +259,7 @@ class ShellStateTest {
     fun `enter runs a selected command without a required argument`() {
         val state = ShellState()
         state.type("/s")
-        repeat(3) { state.onKey("ArrowDown") }
+        repeat(5) { state.onKey("ArrowDown") }
 
         assertEquals(ShellAction.Run("/serve"), state.onKey("Enter"))
         state.type("/h")
@@ -290,7 +290,7 @@ class ShellStateTest {
         assertEquals(listOf("scan"), state.paletteNames)
         state.onKey("Escape")
         state.onKey("Backspace")
-        assertEquals(5, state.palette.size)
+        assertEquals(8, state.palette.size)
     }
 
     @Test

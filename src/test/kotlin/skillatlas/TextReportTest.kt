@@ -243,4 +243,53 @@ class TextReportTest {
         assertTrue("Similar skills:\n  No similar skills found.\n" in report, report)
         assertTrue(report.endsWith("SKILL.md:\n  (content not available)\n"), report)
     }
+
+    @Test
+    fun `tags starred skills first, in the list and in the details`() {
+        val result = ScanResult(
+            repository, "main", sha,
+            listOf(
+                Skill("pdf", "Read PDF files.", "skills/pdf", warnings = listOf("duplicate name"), shipped = true, starred = true),
+                Skill("docx", "Edit Word files.", "skills/docx"),
+            ),
+        )
+
+        val list = TextReport.render(Presentation.SkillList(result, "is:starred"))
+        assertTrue("Found 2 skills, 1 match \"is:starred\":\n\n  pdf  [starred]  [shipped in product]  [warning: duplicate name]\n" in list, list)
+        assertTrue("docx" !in list, list)
+        val detail = TextReport.render(Presentation.detail(result, "pdf"))
+        assertTrue("Skill:       pdf  [starred]  [shipped in product]  [warning: duplicate name]\n" in detail, detail)
+    }
+
+    @Test
+    fun `reports star changes in one line`() {
+        val result = ScanResult(repository, "main", sha, listOf(Skill("pdf", "Read PDF files.", "skills/pdf")))
+        val skill = result.skills.single()
+
+        assertEquals("Starred pdf (anthropics/skills:skills/pdf).\n", TextReport.render(Presentation.StarChanged(result, skill, starred = true, changed = true)))
+        assertEquals(
+            "pdf is already starred (anthropics/skills:skills/pdf).\n",
+            TextReport.render(Presentation.StarChanged(result, skill, starred = true, changed = false)),
+        )
+        assertEquals("Unstarred pdf (anthropics/skills:skills/pdf).\n", TextReport.render(Presentation.StarChanged(result, skill, starred = false, changed = true)))
+        assertEquals("pdf isn't starred (anthropics/skills:skills/pdf).\n", TextReport.render(Presentation.StarChanged(result, skill, starred = false, changed = false)))
+    }
+
+    @Test
+    fun `lists the stars with padded names`() {
+        val stars = listOf(Star("JetBrains/MPS", ".agents/skills/mps-tests", "mps-tests"), Star("anthropics/skills", "skills/pdf", "pdf"))
+
+        assertEquals(
+            """
+            2 starred skills:
+
+              mps-tests  JetBrains/MPS:.agents/skills/mps-tests
+              pdf        anthropics/skills:skills/pdf
+
+            """.trimIndent(),
+            TextReport.render(Presentation.StarList(stars)),
+        )
+        assertEquals("1 starred skill:\n\n  pdf  anthropics/skills:skills/pdf\n", TextReport.render(Presentation.StarList(stars.drop(1))))
+        assertEquals("No starred skills yet.\n", TextReport.render(Presentation.StarList(emptyList())))
+    }
 }

@@ -21,6 +21,8 @@ data class Skill(
     val alsoAt: List<String> = emptyList(),
     /** True when a copy lives in a `resources` folder, so it ships with the product (spec section 4.4). */
     val shipped: Boolean = false,
+    /** True when the user starred this skill; set from the stars file, never by scanning (spec section 5.11). */
+    val starred: Boolean = false,
 )
 
 /** Reads a skill's name and description from its frontmatter (spec section 4.3). */

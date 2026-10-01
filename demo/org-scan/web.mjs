@@ -1,4 +1,4 @@
-// Web view demo: every repository of an organization (spec sections 5.11 and 13).
+// Web view demo: every repository of an organization (spec sections 5.12 and 13).
 import { startWebDemo } from "../lib/web.mjs";
 
 const [url, outDir] = process.argv.slice(2);

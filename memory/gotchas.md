@@ -140,7 +140,8 @@ with `claude -p --resume <session-id>`. The session ID is in the stream-json log
 Bash 4 features, such as `${var^}`, `mapfile`, and associative arrays, fail in `demo/*.sh`.
 
 **How to apply:** keep scripts to bash 3.2, and use `awk` or `tr` for case changes.
-`stat -f %z` is macOS and `stat -c %s` is Linux, so the demo scripts try both.
+`stat -f %z` is macOS and `stat -c %s` is Linux. Try `stat -c %s` first: GNU `stat -f` means
+"filesystem status" and succeeds with the wrong output, which broke `record.sh` on Linux.
 
 ## An exact JSON test must change when the page switches APIs (2026-09-30)
 
@@ -225,25 +226,35 @@ compositing.
 release. Each line takes about 1.3 s to render once the model is loaded, so load it once
 per demo (`kokoro_say.py` reads JSON on stdin).
 
-## The Air cloud sandbox blocks most build downloads (2026-10-01)
+## The JetBrains Air Linux sandbox blocks most downloads (2026-10-01)
 
-Behind its proxy, foojay, `dl.google.com` and Playwright's CDN are blocked, and there is no
-sudo. What worked, all user-level and uncommitted:
-- **JDK 21:** Temurin from `github.com/adoptium/temurin21-binaries` releases, then
-  `org.gradle.java.installations.paths=<jdk>` in `~/.gradle/gradle.properties`.
-- **Google Maven:** a `~/.gradle/init.d` script that points `google()` at
+Only Java 25 is installed; foojay, `dl.google.com` (Mosaic's AndroidX) and Playwright's CDN
+return "403 Blocked by network policy", and there's no sudo. What worked, all outside the repo:
+- Temurin 21 from its GitHub release into `~/.local/jdks`, named in `~/.gradle/gradle.properties`
+  as `org.gradle.java.installations.paths`.
+- `~/.gradle/init.d/google-mirror.gradle` points `dl.google.com` repositories at
   `https://cache-redirector.jetbrains.com/dl.google.com/dl/android/maven2/`.
-- **Chromium:** the matching Chrome Headless Shell zip from
-  `storage.googleapis.com/chrome-for-testing-public/<version>/linux64/`, unpacked into
-  `~/.cache/ms-playwright/chromium_headless_shell-<rev>/` with an `INSTALLATION_COMPLETE` file;
-  its libraries via `apt-get download` + `dpkg-deb -x` into a user dir on `LD_LIBRARY_PATH`.
-- **Fonts:** without any, Chromium crashes (`TargetClosedError`) or lays text out at height 0.
-  Unpack `fonts-dejavu-core` the same way and set `FONTCONFIG_FILE` to a minimal `fonts.conf`.
-- Run `./gradlew build -x installPlaywrightChromium` with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`;
-  that task also wants Playwright's ffmpeg, which is blocked. Every test still runs.
+- Chrome headless shell from `storage.googleapis.com/chrome-for-testing-public/<version>/`
+  into `~/.cache/ms-playwright/chromium_headless_shell-<rev>/` with an `INSTALLATION_COMPLETE`
+  file, and BtbN's static FFmpeg from GitHub as `ffmpeg-<rev>/ffmpeg-linux`.
+- Chromium's libraries and fonts via `apt-get download` with `-o Dir::State=/tmp/apt/state`,
+  unpacked with `dpkg -x` into `~/.local/chromium-libs`; run Gradle with `LD_LIBRARY_PATH` and
+  `FONTCONFIG_FILE` set.
 
-**How to apply:** VHS, ffmpeg and Kokoro aren't available there, so demos are recorded on the
-owner's machine. `gh` only works with the working directory inside a git checkout.
+**Why:** without fonts, 12 browser tests failed on an untouched `main` with zero-height text,
+or Chromium crashed with `TargetClosedError`.
+**How to apply:** if browser tests fail with `height=0`, timeouts or `TargetClosedError`, check
+fonts before code. Without the FFmpeg, run `./gradlew build -x installPlaywrightChromium` with
+`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`; every test still runs. VHS and Kokoro aren't there, so
+narrated demos are recorded on the owner's machine. `gh` needs the working directory inside a
+git checkout.
+
+## The 500-skill similarity timing test fails under IDE load (2026-10-01)
+
+It took 1.31 s once in a full `./gradlew test` while the IDE's analyzer used about two cores,
+and passed three times in a row alone.
+
+**How to apply:** check `uptime` and rerun on a quiet machine; never raise the limit.
 
 ## GitHub lists only a user's public repositories (2026-10-01)
 

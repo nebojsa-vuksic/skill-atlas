@@ -17,18 +17,18 @@ data class RepositoryMetadata(
     @SerialName("full_name") val fullName: String,
     val description: String? = null,
     @SerialName("default_branch") val defaultBranch: String,
-    /** Only read from an owner's repository list, where forks and archived repositories are skipped (spec section 5.11). */
+    /** Only read from an owner's repository list, where forks and archived repositories are skipped (spec section 5.12). */
     val fork: Boolean = false,
     val archived: Boolean = false,
 )
 
-/** An organization or user account (spec section 5.11). */
+/** An organization or user account (spec section 5.12). */
 @Serializable
 data class OwnerMetadata(val login: String, val type: String) {
     val isOrganization: Boolean get() = type == "Organization"
 }
 
-/** What a repository's tree says about skill files, without cloning it (spec section 5.11, step 4). */
+/** What a repository's tree says about skill files, without cloning it (spec section 5.12, step 4). */
 enum class TreeCheck(val mayHaveSkills: Boolean) {
     SKILL_FILES(true),
     /** Too large for one response, so only a clone can tell. */
@@ -39,7 +39,7 @@ enum class TreeCheck(val mayHaveSkills: Boolean) {
     FAILED(true),
 }
 
-/** Reads repository and owner metadata from the GitHub REST API (spec sections 4.1, step 2, and 5.11). */
+/** Reads repository and owner metadata from the GitHub REST API (spec sections 4.1, step 2, and 5.12). */
 class GitHubClient(
     private val apiBaseUrl: String = "https://api.github.com",
     private val token: String? = null,

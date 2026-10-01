@@ -1,6 +1,6 @@
 # Plan: scan an organization's repositories
 
-Implements spec section 5.11 (with 3.3, 7, 10.25–28 and the scenarios in 11.2). The spec
+Implements spec section 5.12 (with 3.3, 7, 10.25–28 and the scenarios in 11.2). The spec
 says what the feature does; this file says how we build it and in which order. Each step
 ends with its tests passing, so the branch stays green while it grows.
 
@@ -26,7 +26,7 @@ results for `filename:SKILL.md org:JetBrains` missed repositories that have skil
 
 ## Steps
 
-1. **Spec.** Section 5.11, the owner URL forms in 3.3, the new messages in 7, acceptance
+1. **Spec.** Section 5.12, the owner URL forms in 3.3, the new messages in 7, acceptance
    criteria 25–28, and the test scenarios in 11.2. *(This change.)*
 2. **URL parsing** (`GitHubUrl.kt`). Add `GitHubUrl.target(input)`, returning a repository
    or an owner (`ScanTarget`). `parse` keeps rejecting owner URLs, so every single-repository
@@ -34,7 +34,7 @@ results for `filename:SKILL.md org:JetBrains` missed repositories that have skil
    rejects them.
 3. **GitHub client** (`GitHubClient.kt`). Share one request helper between the existing
    metadata call and three new ones: `fetchOwner`, `listRepositories` (paged until a short
-   page) and `checkSkillFiles` (the tree answers of 5.11 step 4). Errors map onto the
+   page) and `checkSkillFiles` (the tree answers of 5.12 step 4). Errors map onto the
    existing exceptions, plus `OwnerNotFoundException` (exit 3).
 4. **Discovery** (`OwnerSearch.kt`). `OwnerSearch.discover(owner)`: list, skip, check up to
    8 at a time, sort. Returns the repositories to scan with their listed metadata, and the

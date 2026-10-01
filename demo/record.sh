@@ -33,9 +33,10 @@ fi
 
 # Demos run against real GitHub repositories; the token avoids the anonymous rate limit.
 export GITHUB_TOKEN="${GITHUB_TOKEN:-$(gh auth token)}"
-# Demo scans go to their own scan log, not yours.
+# Demo scans and stars go to their own scan log and stars file, not yours.
 XDG_STATE_HOME="$(mktemp -d)"
-export XDG_STATE_HOME
+XDG_DATA_HOME="$(mktemp -d)"
+export XDG_STATE_HOME XDG_DATA_HOME
 
 echo "record: building skill-atlas"
 (cd "$ROOT" && ./gradlew -q installDist)
@@ -50,7 +51,8 @@ trap cleanup EXIT
 # Playwright renders the caption bars for every demo, and records the web view.
 (cd "$ROOT/demo" && { [ -d node_modules ] || npm install --silent --no-audit --no-fund; })
 (cd "$ROOT/demo" && npx playwright install --only-shell chromium >/dev/null)
-size() { stat -f %z "$1" 2>/dev/null || stat -c %s "$1"; }
+# GNU stat first: on Linux, `stat -f` means filesystem status and succeeds with the wrong output.
+size() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1"; }
 
 if [ -f "$DEMO/web.mjs" ]; then
 

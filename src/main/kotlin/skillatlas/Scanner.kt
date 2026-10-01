@@ -13,7 +13,7 @@ class Scanner(
     private val cloneUrl: (RepoCoordinates) -> String = { "https://github.com/${it.owner}/${it.name}.git" },
     private val tempRoot: Path? = null,
 ) {
-    /** Scans the repository at [url], reporting each step through [progress]. An owner URL is rejected (spec section 5.11). */
+    /** Scans the repository at [url], reporting each step through [progress]. An owner URL is rejected (spec section 5.12). */
     fun scan(url: String, progress: (String) -> Unit = {}): ScanResult {
         val repository = when (val target = GitHubUrl.target(url)) {
             is ScanTarget.Repository -> target.coordinates
@@ -25,13 +25,13 @@ class Scanner(
         return clone(repository, github.fetchRepository(repository), progress)
     }
 
-    /** Scans a repository whose metadata is already known from its owner's repository list (spec section 5.11, step 5). */
+    /** Scans a repository whose metadata is already known from its owner's repository list (spec section 5.12, step 5). */
     fun scan(listed: RepositoryMetadata, progress: (String) -> Unit = {}): ScanResult {
         git.ensureAvailable()
         return clone(coordinatesOf(listed), listed, progress)
     }
 
-    /** Finds the repositories of the organization or user [login] that may have skills (spec section 5.11). */
+    /** Finds the repositories of the organization or user [login] that may have skills (spec section 5.12). */
     fun discoverOwner(login: String, progress: (String) -> Unit = {}): OwnerDiscovery = OwnerSearch(github).discover(login, progress)
 
     private fun clone(repository: RepoCoordinates, metadata: RepositoryMetadata, progress: (String) -> Unit): ScanResult {

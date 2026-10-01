@@ -36,6 +36,7 @@ data class ScanResponse(
         val path: String,
         @SerialName("also_at") val alsoAt: List<String>,
         val shipped: Boolean,
+        val starred: Boolean,
         val warnings: List<String>,
         val content: String?,
         @SerialName("content_html") val contentHtml: String?,
@@ -61,7 +62,7 @@ data class ScanResponse(
                 result.skills.map {
                     val content = result.contents[it.path]
                     SkillJson(
-                        it.name, it.description, shortenDescription(it.description), it.path, it.alsoAt, it.shipped, it.warnings,
+                        it.name, it.description, shortenDescription(it.description), it.path, it.alsoAt, it.shipped, it.starred, it.warnings,
                         content, content?.let(SkillMarkdown::render),
                         similar.getValue(it.path).map { s -> SimilarJson(s.path, s.name, s.score) },
                     )
@@ -72,7 +73,7 @@ data class ScanResponse(
     }
 }
 
-/** `GET /api/scans`: several repositories and owners scanned together (spec sections 5.10 and 5.11). */
+/** `GET /api/scans`: several repositories and owners scanned together (spec sections 5.10 and 5.12). */
 object MultiScanResponse {
     @Serializable
     data class SkillJson(
@@ -84,6 +85,7 @@ object MultiScanResponse {
         val path: String,
         @SerialName("also_at") val alsoAt: List<String>,
         val shipped: Boolean,
+        val starred: Boolean,
         val warnings: List<String>,
         val content: String?,
         @SerialName("content_html") val contentHtml: String?,
@@ -133,7 +135,7 @@ object MultiScanResponse {
                 val content = result.contents[skill.path]
                 SkillJson(
                     repository, id, skill.name, skill.description, shortenDescription(skill.description), skill.path,
-                    skill.alsoAt, skill.shipped, skill.warnings, content, content?.let(SkillMarkdown::render),
+                    skill.alsoAt, skill.shipped, skill.starred, skill.warnings, content, content?.let(SkillMarkdown::render),
                     similar.getValue(id).map { other ->
                         SimilarJson(other.path.substringBefore(':'), other.path, other.path.substringAfter(':'), other.name, other.score)
                     },
@@ -174,19 +176,33 @@ object MultiScanResponse {
 @Serializable
 data class ErrorResponse(val error: String, @SerialName("exit_code") val exitCode: Int)
 
+/** The body of `POST /api/star`: the skill's fields from `/api/scans`, and the state to give it (spec section 5.11). */
+@Serializable
+data class StarRequest(
+    val repository: String,
+    val path: String,
+    @SerialName("also_at") val alsoAt: List<String> = emptyList(),
+    val name: String,
+    val starred: Boolean,
+)
+
+@Serializable
+data class StarResponse(val starred: Boolean)
+
 /**
  * The local web view (spec section 5.4): a static page plus `GET /api/scan?url=…`, served
- * on 127.0.0.1 only and backed by the same [Scanner] and [ScanLog] as the CLI.
+ * on 127.0.0.1 only and backed by the same [Scanner], [ScanLog] and [StarStore] as the CLI.
  */
 class WebServer(
     private val scanner: Scanner,
     private val scanLog: ScanLog,
+    private val stars: StarStore,
     private val clock: Clock,
     private val warn: (String) -> Unit,
 ) {
     private val cache = ScanCache()
 
-    /** Owners' repository lists, so loading an owner again makes no GitHub request (spec section 5.11). */
+    /** Owners' repository lists, so loading an owner again makes no GitHub request (spec section 5.12). */
     private val owners = ExpiringCache<OwnerDiscovery>()
 
     private val json = Json { encodeDefaults = true }
@@ -217,6 +233,7 @@ class WebServer(
         if (host != "127.0.0.1:$port" && host != "localhost:$port") {
             return sendText(exchange, 403, "Forbidden")
         }
+        if (exchange.requestURI.path == "/api/star") return star(exchange, port)
         if (exchange.requestMethod != "GET") {
             exchange.responseHeaders.add("Allow", "GET")
             return sendText(exchange, 405, "Method Not Allowed")
@@ -250,7 +267,7 @@ class WebServer(
         } catch (e: Exception) {
             warn("warning: could not write scan log ${scanLog.file}: ${e.message}")
         }
-        sendJson(exchange, 200, json.encodeToString(ScanResponse.of(result)))
+        sendJson(exchange, 200, json.encodeToString(ScanResponse.of(result.withStars(stars.readOrWarn(warn)))))
     }
 
     private fun scanMany(exchange: HttpExchange) {
@@ -281,7 +298,45 @@ class WebServer(
                 warn("warning: could not write scan log ${scanLog.file}: ${e.message}")
             }
         }
-        sendJson(exchange, 200, MultiScanResponse.of(scan))
+        // Stars are read for every response, so cached results still show the current ones.
+        val starred = stars.readOrWarn(warn)
+        sendJson(exchange, 200, MultiScanResponse.of(scan.mapResults { it.withStars(starred) }))
+    }
+
+    /**
+     * `POST /api/star` (spec section 5.11). A JSON content type and a same-origin `Origin` keep
+     * other web pages out: they can only send JSON after a CORS preflight, which is never answered.
+     */
+    private fun star(exchange: HttpExchange, port: Int) {
+        if (exchange.requestMethod != "POST") {
+            exchange.responseHeaders.add("Allow", "POST")
+            return sendText(exchange, 405, "Method Not Allowed")
+        }
+        val origin = exchange.requestHeaders.getFirst("Origin")
+        if (origin != null && origin != "http://127.0.0.1:$port" && origin != "http://localhost:$port") {
+            return sendText(exchange, 403, "Forbidden")
+        }
+        val type = exchange.requestHeaders.getFirst("Content-Type")?.substringBefore(';')?.trim()?.lowercase()
+        if (type != "application/json") return sendText(exchange, 415, "Unsupported Media Type")
+
+        fun invalid(reason: String) =
+            sendJson(exchange, 400, json.encodeToString(ErrorResponse("invalid star request: $reason", ExitCode.USAGE)))
+        val body = exchange.requestBody.readNBytes(MAX_STAR_BODY + 1)
+        if (body.size > MAX_STAR_BODY) return invalid("the body is larger than 64 KB")
+        val request = try {
+            REQUEST_JSON.decodeFromString<StarRequest>(body.toString(Charsets.UTF_8))
+        } catch (_: IllegalArgumentException) {
+            return invalid("expected JSON with repository, path, name and starred")
+        }
+        if (request.repository.isBlank() || request.path.isBlank()) return invalid("repository and path can't be empty")
+
+        val skill = Skill(request.name, "", request.path, alsoAt = request.alsoAt)
+        try {
+            if (request.starred) stars.star(request.repository, skill) else stars.unstar(request.repository, skill)
+        } catch (e: StarsFileException) {
+            return sendJson(exchange, 500, json.encodeToString(ErrorResponse(e.message.orEmpty(), e.exitCode)))
+        }
+        sendJson(exchange, 200, json.encodeToString(StarResponse(request.starred)))
     }
 
     private fun queryParameters(exchange: HttpExchange, name: String): List<String> =
@@ -323,6 +378,11 @@ class WebServer(
         )
 
         const val MAX_REPOSITORIES = 10
+
+        const val MAX_STAR_BODY = 64 * 1024
+
+        /** Extra fields, such as the rest of a skill from `/api/scans`, are fine. */
+        val REQUEST_JSON = Json { ignoreUnknownKeys = true }
 
         /** HTTP status for each exit code in spec section 7. */
         fun statusFor(exitCode: Int) = when (exitCode) {

@@ -11,7 +11,7 @@ sealed interface RepositoryOutcome {
     /** `owner/name` when the URL could be parsed, otherwise the URL as given. */
     val label: String
 
-    /** The owner URL this repository was found through, or null when its own URL was given (spec section 5.11). */
+    /** The owner URL this repository was found through, or null when its own URL was given (spec section 5.12). */
     val from: String?
 
     data class Scanned(override val url: String, val result: ScanResult, override val from: String? = null) : RepositoryOutcome {
@@ -26,7 +26,7 @@ sealed interface RepositoryOutcome {
     ) : RepositoryOutcome
 }
 
-/** How one owner URL of a scan turned out (spec section 5.11). */
+/** How one owner URL of a scan turned out (spec section 5.12). */
 sealed interface OwnerOutcome {
     val url: String
     val label: String
@@ -64,24 +64,28 @@ sealed interface OwnerOutcome {
 /** A failed repository or owner, by its label. */
 data class ScanFailure(val label: String, val error: SkillAtlasException)
 
-/** Everything a scan of several URLs found, in the order of the URLs, with owners expanded in place (spec sections 5.10 and 5.11). */
+/** Everything a scan of several URLs found, in the order of the URLs, with owners expanded in place (spec sections 5.10 and 5.12). */
 data class MultiScan(
     val repositories: List<RepositoryOutcome>,
     val owners: List<OwnerOutcome> = emptyList(),
     /** Every failure, of repositories and of owners, in URL order. The first one sets the exit code. */
     val failures: List<ScanFailure> = repositories.filterIsInstance<RepositoryOutcome.Failed>().map { ScanFailure(it.label, it.error) },
 ) {
-    /** What the views show: an owner's repositories without skills are left out (spec section 5.11). */
+    /** What the views show: an owner's repositories without skills are left out (spec section 5.12). */
     val reported: List<RepositoryOutcome>
         get() = repositories.filterNot { it is RepositoryOutcome.Scanned && it.from != null && it.result.skills.isEmpty() }
 
     /** Every repository that was scanned, reported or not, each of which goes into the scan log. */
     val scanned: List<ScanResult> get() = repositories.filterIsInstance<RepositoryOutcome.Scanned>().map { it.result }
+
+    /** The same scan with every scanned result passed through [transform], e.g. to mark its stars. */
+    fun mapResults(transform: (ScanResult) -> ScanResult): MultiScan =
+        copy(repositories = repositories.map { if (it is RepositoryOutcome.Scanned) it.copy(result = transform(it.result)) else it })
 }
 
 /**
  * Scans several repositories, up to [parallelism] at a time, keeping the order the URLs were given in.
- * Owner URLs are first expanded into their repositories with skill files (spec section 5.11).
+ * Owner URLs are first expanded into their repositories with skill files (spec section 5.12).
  */
 class MultiScanner(private val scanner: Scanner, private val parallelism: Int = 4) {
     fun scanAll(urls: List<String>, progress: (String) -> Unit = {}): MultiScan {

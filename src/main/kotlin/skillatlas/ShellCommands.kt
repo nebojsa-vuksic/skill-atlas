@@ -21,6 +21,9 @@ object ShellCommands {
         ShellCommand("filter", "<words>", "List the skills whose name or description has every word", ArgumentKind.OPTIONAL, needsRepository = true),
         ShellCommand("skill", "<name-or-path>", "Show one skill: description, paths, similar skills, SKILL.md", ArgumentKind.REQUIRED, needsRepository = true),
         ShellCommand("similar", "<name-or-path>", "Show the skills most similar to one skill", ArgumentKind.REQUIRED, needsRepository = true),
+        ShellCommand("star", "<name-or-path>", "Star a skill of the current repository", ArgumentKind.REQUIRED, needsRepository = true),
+        ShellCommand("unstar", "<name-or-path>", "Remove a skill's star", ArgumentKind.REQUIRED, needsRepository = true),
+        ShellCommand("stars", "", "List every starred skill", ArgumentKind.NONE, needsRepository = false),
         ShellCommand("browse", "", "Browse the current repository full-screen; q returns here", ArgumentKind.NONE, needsRepository = true),
         ShellCommand("repo", "", "Show the current repository", ArgumentKind.NONE, needsRepository = true),
         ShellCommand("serve", "[port]", "Start the web view in the background; /serve stop stops it", ArgumentKind.OPTIONAL, needsRepository = false),
@@ -32,7 +35,7 @@ object ShellCommands {
     fun find(name: String): ShellCommand? = ALL.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
     /** The commands whose argument is a skill, which the palette completes with skill names. */
-    val SKILL_ARGUMENT = setOf("skill", "similar")
+    val SKILL_ARGUMENT = setOf("skill", "similar", "star", "unstar")
 }
 
 /** A candidate that matched the palette's query, and where in [text] it matched. */
@@ -73,7 +76,7 @@ sealed interface PaletteItem {
         val completion: String get() = if (command.argument == ArgumentKind.NONE) "/${command.name}" else "/${command.name} "
     }
 
-    /** A skill argument for `/skill` or `/similar`: a name, or a path when the name is shared. */
+    /** A skill argument for `/skill`, `/similar`, `/star` or `/unstar`: a name, or a path when the name is shared. */
     data class SkillArgument(val command: String, override val match: PaletteMatch, override val description: String) : PaletteItem {
         val completion: String get() = "/$command ${match.text}"
     }

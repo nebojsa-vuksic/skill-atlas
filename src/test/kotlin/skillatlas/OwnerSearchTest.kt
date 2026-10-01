@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/** Finding an owner's repositories with skill files through the GitHub API (spec section 5.11, steps 1 to 4). */
+/** Finding an owner's repositories with skill files through the GitHub API (spec section 5.12, steps 1 to 4). */
 class OwnerSearchTest {
     private lateinit var api: HttpServer
     private val responses = Collections.synchronizedMap(mutableMapOf<String, Pair<Int, String>>())
