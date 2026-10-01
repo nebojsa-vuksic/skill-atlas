@@ -45,13 +45,15 @@ class CurrentRepository(val result: ScanResult, val similar: Map<String, List<Si
 
 /**
  * The shell's commands and the state they share: the current repository and the web view
- * (spec section 5.9). No terminal code, so every command can be tested directly.
+ * (spec section 5.9). No terminal code, so every command can be tested directly. Stars are
+ * read from [stars] each time skills are shown, so changes made elsewhere show up (spec section 5.11).
  * [startWebView] starts `serve` on a port, passing its warnings on, and may throw
  * [java.io.IOException].
  */
 class ShellSession(
     private val scanner: Scanner,
     private val scanLog: ScanLog,
+    private val stars: StarStore,
     private val clock: Clock,
     private val startWebView: (port: Int, warn: (String) -> Unit) -> WebServer.Running,
 ) {
@@ -80,7 +82,13 @@ class ShellSession(
             "filter" -> withRepository { filter(it, argument) }
             "skill" -> withRepository { detail(it, argument) { detail -> ShellBlock.Report(detail) } }
             "similar" -> withRepository { detail(it, argument) { detail -> ShellBlock.Similar(detail) } }
-            "browse" -> withRepository { ShellOutcome.Browse(BrowseState(it.result, it.similar)) }
+            "star" -> withRepository { star(it, argument, starring = true) }
+            "unstar" -> withRepository { star(it, argument, starring = false) }
+            "stars" -> print(starList())
+            "browse" -> withRepository {
+                val (result, warnings) = withStars(it.result)
+                ShellOutcome.Browse(BrowseState(result, it.similar, stars, warnings.firstOrNull()?.let { w -> Span(w.text, Look.WARNING) }))
+            }
             "repo" -> withRepository { print(ShellBlock.Repository(it.result)) }
             "serve" -> serve(argument)
             "log" -> print(log())
@@ -99,7 +107,8 @@ class ShellSession(
     /** Makes a finished scan the current repository, logs it, and returns its report. */
     fun adopt(scanned: CurrentRepository): List<ShellBlock> {
         repository = scanned
-        val blocks = mutableListOf<ShellBlock>(ShellBlock.Report(Presentation.SkillList(scanned.result)))
+        val (result, warnings) = withStars(scanned.result)
+        val blocks = mutableListOf<ShellBlock>(*warnings.toTypedArray(), ShellBlock.Report(Presentation.SkillList(result)))
         try {
             scanLog.append(ScanLogEntry.of(scanned.result, clock.instant()))
         } catch (e: Exception) {
@@ -117,13 +126,39 @@ class ShellSession(
     private fun withRepository(action: (CurrentRepository) -> ShellOutcome): ShellOutcome =
         repository?.let(action) ?: print(NO_REPOSITORY)
 
-    private fun filter(repository: CurrentRepository, words: String) =
-        print(ShellBlock.Report(Presentation.SkillList(repository.result, words.ifBlank { null })))
+    /** [result] with its stars, plus a warning block when the stars file can't be read. */
+    private fun withStars(result: ScanResult): Pair<ScanResult, List<ShellBlock.Message>> {
+        val warnings = mutableListOf<ShellBlock.Message>()
+        return result.withStars(stars.readOrWarn { warnings += ShellBlock.Message(it, Look.WARNING) }) to warnings
+    }
 
-    private fun detail(repository: CurrentRepository, selector: String, block: (Presentation.SkillDetail) -> ShellBlock) = try {
-        print(block(Presentation.detail(repository.result, selector)))
+    private fun filter(repository: CurrentRepository, words: String): ShellOutcome {
+        val (result, warnings) = withStars(repository.result)
+        return print(*warnings.toTypedArray(), ShellBlock.Report(Presentation.SkillList(result, words.ifBlank { null })))
+    }
+
+    private fun detail(repository: CurrentRepository, selector: String, block: (Presentation.SkillDetail) -> ShellBlock): ShellOutcome {
+        val (result, warnings) = withStars(repository.result)
+        return try {
+            print(*warnings.toTypedArray(), block(Presentation.detail(result, selector)))
+        } catch (e: SkillAtlasException) {
+            print(ShellBlock.Error(e.message.orEmpty()))
+        }
+    }
+
+    private fun star(repository: CurrentRepository, selector: String, starring: Boolean): ShellOutcome = try {
+        val skill = Presentation.findSkill(repository.result, selector)
+        val name = repository.result.repository.fullName
+        val changed = if (starring) stars.star(name, skill) else stars.unstar(name, skill)
+        print(ShellBlock.Report(Presentation.StarChanged(repository.result, skill, starring, changed)))
     } catch (e: SkillAtlasException) {
         print(ShellBlock.Error(e.message.orEmpty()))
+    }
+
+    private fun starList(): ShellBlock = try {
+        ShellBlock.Report(Presentation.StarList(stars.read()))
+    } catch (e: StarsFileException) {
+        ShellBlock.Error(e.message.orEmpty())
     }
 
     private fun serve(argument: String): ShellOutcome {

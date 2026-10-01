@@ -81,4 +81,20 @@ class SkillFilterTest {
         assertTrue(SkillFilter.parse("repo:jetbrains/").matchesRepository("JetBrains/MPS"))
         assertFalse(SkillFilter.parse("repo:koog").matchesRepository("JetBrains/MPS"))
     }
+
+    @Test
+    fun `is starred keeps only starred skills and is not a word`() {
+        val starred = Skill("pdf", "Read PDF files.", "skills/pdf", starred = true)
+        val plain = Skill("docx", "Read Word files.", "skills/docx")
+
+        val query = SkillFilter.parse("IS:STARRED read")
+        assertEquals(SkillFilter.Query(listOf("read"), emptyList(), starred = true), query)
+        assertEquals(listOf(starred), SkillFilter.filter(listOf(plain, starred), query))
+        assertEquals(listOf(starred), SkillFilter.filter(listOf(plain, starred), SkillFilter.parse("is:starred")))
+        assertEquals(emptyList(), SkillFilter.filter(listOf(plain, starred), SkillFilter.parse("is:starred word")))
+        assertEquals(SkillFilter.Query(emptyList(), listOf("acme"), starred = true), SkillFilter.parse("repo:acme is:starred"))
+        // It's never highlighted, and other is: words are ordinary words.
+        assertEquals(emptyList(), SkillFilter.matchRanges("is:starred", SkillFilter.words("is:starred")))
+        assertEquals(SkillFilter.Query(listOf("is:shipped"), emptyList()), SkillFilter.parse("is:shipped"))
+    }
 }

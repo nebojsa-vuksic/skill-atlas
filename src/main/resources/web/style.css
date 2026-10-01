@@ -16,6 +16,7 @@
   --hover-bg: #f0f7f9;
   --mark-bg: #fde68a;
   --code-bg: #eef0f3;
+  --star: #b7791f;
   color-scheme: light dark;
 }
 
@@ -38,6 +39,7 @@
     --hover-bg: #172229;
     --mark-bg: #6b5412;
     --code-bg: #20252c;
+  --star: #f2c94c;
   }
 }
 
@@ -211,6 +213,20 @@ button:disabled { opacity: 0.6; cursor: progress; }
 
 .filter-count.active { border-color: var(--accent); background: var(--accent); color: var(--bg); }
 
+/* Starred only (spec section 5.11): adds or removes is:starred in the filter. */
+.starred-only {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.starred-only[aria-pressed="true"] { border-color: var(--star); background: var(--star); color: var(--bg); }
+
 .no-match { margin: 0; padding: 16px 12px; color: var(--muted); }
 
 .skills {
@@ -258,6 +274,7 @@ button:disabled { opacity: 0.6; cursor: progress; }
 .skill-name::before { content: "● "; }
 
 .icon { flex: none; font-size: 12px; cursor: help; }
+.star-icon { color: var(--star); }
 .shipped-icon { color: var(--branch); }
 .warning-icon { color: var(--warn); }
 .copies-icon { color: var(--muted); }
@@ -295,6 +312,18 @@ button:disabled { opacity: 0.6; cursor: progress; }
 }
 
 .detail-name { margin: 0; color: var(--accent); font-size: 20px; }
+
+.star-button {
+  margin-top: 8px;
+  padding: 2px 12px;
+  border: 1px solid var(--star);
+  border-radius: 999px;
+  background: none;
+  color: var(--star);
+  font-size: 13px;
+}
+
+.star-button[aria-pressed="true"] { background: var(--star); color: var(--bg); }
 .detail-description { margin: 8px 0; }
 .detail-description.none { color: var(--muted); }
 .detail-paths { margin-bottom: 8px; }
@@ -476,7 +505,7 @@ button:disabled { opacity: 0.6; cursor: progress; }
 .chip-name { font-weight: 600; }
 .chip-count { color: var(--muted); font-size: 12px; }
 
-/* An organization or user (spec section 5.11): a dashed accent border, and how many of its repositories have skills. */
+/* An organization or user (spec section 5.12): a dashed accent border, and how many of its repositories have skills. */
 .chip.owner { border-style: dashed; border-color: var(--accent); }
 .chip.owner.failed { border-color: var(--error); }
 .chip-repos { color: var(--muted); font-size: 12px; }

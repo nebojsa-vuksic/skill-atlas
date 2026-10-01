@@ -5,7 +5,7 @@ data class RepoCoordinates(val owner: String, val name: String) {
     override fun toString() = "$owner/$name"
 }
 
-/** What a URL given to `scan` names: one repository, or every repository of an owner (spec sections 3.3 and 5.11). */
+/** What a URL given to `scan` names: one repository, or every repository of an owner (spec sections 3.3 and 5.12). */
 sealed interface ScanTarget {
     data class Repository(val coordinates: RepoCoordinates) : ScanTarget
 

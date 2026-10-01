@@ -4,7 +4,7 @@ import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 
-/** The repositories of one organization or user that may have skills (spec section 5.11, steps 1 to 4). */
+/** The repositories of one organization or user that may have skills (spec section 5.12, steps 1 to 4). */
 data class OwnerDiscovery(
     val owner: OwnerMetadata,
     /** The repositories to scan, sorted by `owner/name` ignoring case, with their listed metadata. */

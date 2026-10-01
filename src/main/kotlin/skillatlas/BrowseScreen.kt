@@ -1,7 +1,7 @@
 package skillatlas
 
 /** How a piece of `browse` or `shell` text is drawn; the Mosaic layer maps each to colors (spec sections 5.8 and 5.9). */
-enum class Look { NORMAL, DIM, BOLD, ACCENT, SELECTED, HIGHLIGHT, TITLE, REPOSITORY, COMMIT, BRANCH, SHIPPED, WARNING, COUNT, BAR, CURSOR, ERROR }
+enum class Look { NORMAL, DIM, BOLD, ACCENT, SELECTED, HIGHLIGHT, TITLE, REPOSITORY, COMMIT, BRANCH, SHIPPED, WARNING, COUNT, BAR, CURSOR, ERROR, STAR }
 
 data class Span(val text: String, val look: Look = Look.NORMAL)
 
@@ -21,7 +21,7 @@ object BrowseScreen {
     private const val MAX_DESCRIPTION_LINES = 6
 
     private val HELP = mapOf(
-        BrowseFocus.LIST to "↑↓ select  / filter  tab similar  pgup/pgdn scroll  esc clear  q quit",
+        BrowseFocus.LIST to "↑↓ select  / filter  s star  tab similar  pgup/pgdn scroll  esc clear  q quit",
         BrowseFocus.FILTER to "type to filter  enter/↓ done  esc clear  backspace delete",
         BrowseFocus.SIMILAR to "↑↓ move  enter open  tab/esc back",
     )
@@ -45,7 +45,8 @@ object BrowseScreen {
                 val rightLine = shown.getOrNull(i).orEmpty()
                 add(fit(leftLines[i], left) + Span("│", Look.DIM) + fit(listOf(Span(" ")) + rightLine, right))
             }
-            add(fit(listOf(Span(" " + HELP.getValue(state.focus), Look.DIM)), columns))
+            val notice = state.notice
+            add(fit(listOf(if (notice == null) Span(" " + HELP.getValue(state.focus), Look.DIM) else notice.copy(text = " " + notice.text)), columns))
         }
         return Frame(lines, body, maxScroll)
     }
@@ -95,6 +96,7 @@ object BrowseScreen {
     private fun skillItem(skill: Skill, selected: Boolean, words: List<String>, width: Int): List<Line> {
         val bar = if (selected) Span("▌", Look.ACCENT) else Span(" ")
         val icons = buildList {
+            if (skill.starred) add(Span("★", Look.STAR))
             if (skill.shipped) add(Span("◆", Look.SHIPPED))
             if (skill.warnings.isNotEmpty()) add(Span("⚠", Look.WARNING))
             if (skill.alsoAt.isNotEmpty()) add(Span("⧉${skill.alsoAt.size}", Look.DIM))
@@ -120,6 +122,7 @@ object BrowseScreen {
         val lines = mutableListOf<Line>()
         lines.add(buildList {
             add(Span(sanitize(skill.name), Look.SELECTED))
+            if (skill.starred) add(Span("  ★ $STARRED_LABEL", Look.STAR))
             if (skill.shipped) add(Span("  ◆ $SHIPPED_LABEL", Look.SHIPPED))
             if (skill.warnings.isNotEmpty()) add(Span("  ⚠ ${skill.warnings.joinToString(", ")}", Look.WARNING))
         })

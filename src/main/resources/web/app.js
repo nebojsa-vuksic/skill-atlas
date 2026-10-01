@@ -1,4 +1,5 @@
-// Skill Atlas web view: calls GET /api/scans and renders the result (spec sections 5.4 and 5.10).
+// Skill Atlas web view: calls GET /api/scans and renders the result (spec sections 5.4 and 5.10),
+// and POST /api/star to star skills (spec section 5.11).
 // Repository content is inserted with textContent. The one exception is content_html,
 // which the server renders from Markdown with raw HTML escaped and unsafe links removed.
 "use strict";
@@ -70,7 +71,7 @@ function githubUrl(repository, path) {
     (path === "." ? "" : path + "/");
 }
 
-// "owner/repo", or "owner:<login>" for an organization or user (spec section 5.11), from any accepted URL
+// "owner/repo", or "owner:<login>" for an organization or user (spec section 5.12), from any accepted URL
 // form, lowercased, to tell whether two URLs name the same thing.
 function repositoryKey(url) {
   const trimmed = url.trim().replace(/\.git$/i, "").replace(/\/+$/, "");
@@ -121,7 +122,7 @@ function repositoryChip(repository) {
   return chip;
 }
 
-// One chip for a whole organization or user: its repositories with skills, and their skill count (spec section 5.11).
+// One chip for a whole organization or user: its repositories with skills, and their skill count (spec section 5.12).
 function ownerChip(owner) {
   const chip = element("span", "chip owner" + (owner.error ? " failed" : ""));
   chip.dataset.url = owner.url;
@@ -176,6 +177,7 @@ function icons(skill) {
     node.title = title;
     nodes.push(node);
   };
+  if (skill.starred) icon("star-icon", "★", "starred");
   if (skill.shipped) icon("shipped-icon", "◆", "shipped in product");
   if (skill.warnings.length > 0) icon("warning-icon", "⚠", skill.warnings.join("\n"));
   if (skill.also_at.length > 0) {
@@ -215,14 +217,18 @@ function renderGroupHeader(repository) {
   return header;
 }
 
-// ---- Filter (spec sections 5.5 and 5.10) ----
+// ---- Filter (spec sections 5.5, 5.10 and 5.11) ----
 
-// The query's words, and its repo:<text> qualifiers, lowercased.
+const STARRED = "is:starred";
+
+// The query's words, its repo:<text> qualifiers, and whether is:starred is in it, lowercased.
 function parseQuery(query) {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const rest = tokens.filter((token) => token !== STARRED);
   return {
-    words: tokens.filter((token) => !token.startsWith("repo:")),
-    repositories: tokens.filter((token) => token.startsWith("repo:")).map((token) => token.slice(5)).filter(Boolean),
+    words: rest.filter((token) => !token.startsWith("repo:")),
+    repositories: rest.filter((token) => token.startsWith("repo:")).map((token) => token.slice(5)).filter(Boolean),
+    starred: tokens.includes(STARRED),
   };
 }
 
@@ -321,13 +327,13 @@ function fillItem(item, skill, words) {
 function applyFilter() {
   if (!current) return;
   const query = $("filter").value;
-  const { words, repositories } = parseQuery(query);
+  const { words, repositories, starred } = parseQuery(query);
   const skills = current.skills;
   current.visible = [];
   const visibleByRepository = new Map();
   items().forEach((item, i) => {
     const skill = skills[i];
-    const visible = matchesRepository(skill.repository, repositories) && matches(skill, words);
+    const visible = matchesRepository(skill.repository, repositories) && (!starred || skill.starred) && matches(skill, words);
     item.hidden = !visible;
     if (visible) {
       current.visible.push(i);
@@ -343,7 +349,8 @@ function applyFilter() {
 
   const count = $("filter-count");
   count.textContent = current.visible.length + " of " + skills.length;
-  count.classList.toggle("active", words.length + repositories.length > 0);
+  count.classList.toggle("active", words.length + repositories.length > 0 || starred);
+  $("starred-only").setAttribute("aria-pressed", String(starred));
   $("no-match").textContent = 'No skills match "' + query.trim() + '".';
   show($("no-match"), current.visible.length === 0);
 
@@ -365,6 +372,13 @@ function setFilter(query) {
 
 $("filter").addEventListener("input", applyFilter);
 
+// Adds is:starred to the query, or removes it (spec section 5.11).
+$("starred-only").addEventListener("click", () => {
+  const tokens = $("filter").value.split(/\s+/).filter(Boolean);
+  const kept = tokens.filter((token) => token.toLowerCase() !== STARRED);
+  setFilter((kept.length < tokens.length ? kept : [...kept, STARRED]).join(" "));
+});
+
 $("filter").addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     event.preventDefault();
@@ -381,10 +395,11 @@ function isTextField(target) {
 }
 
 document.addEventListener("keydown", (event) => {
-  if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
+  if ((event.key !== "/" && event.key !== "s") || event.ctrlKey || event.metaKey || event.altKey) return;
   if (isTextField(event.target) || !current || $("split").hidden) return;
   event.preventDefault();
-  $("filter").focus();
+  if (event.key === "/") $("filter").focus();
+  else toggleStar();
 });
 
 function items() {
@@ -463,6 +478,45 @@ function selectId(id) {
   select(index, { focus: true });
 }
 
+// ---- Stars (spec section 5.11) ----
+
+function renderStarButton(skill) {
+  const button = $("star-button");
+  button.textContent = skill.starred ? "★ Starred" : "☆ Star";
+  button.setAttribute("aria-pressed", String(skill.starred));
+}
+
+// Stars or unstars the selected skill. The page changes only once the server has saved it.
+async function toggleStar() {
+  if (!current || current.shown < 0) return;
+  const index = current.shown;
+  const skill = current.skills[index];
+  show($("error"), false);
+  try {
+    const response = await fetch("/api/star", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repository: skill.repository, path: skill.path, also_at: skill.also_at, name: skill.name, starred: !skill.starred,
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "HTTP " + response.status);
+    skill.starred = body.starred;
+  } catch (error) {
+    $("error").textContent = "error: " + error.message;
+    show($("error"), true);
+    return;
+  }
+  const head = items()[index].querySelector(".skill-head");
+  head.replaceChildren(head.querySelector(".skill-name"), ...icons(skill));
+  if (current.shown === index) renderStarButton(skill);
+  // With is:starred in the filter, an unstarred skill leaves the list.
+  applyFilter();
+}
+
+$("star-button").addEventListener("click", toggleStar);
+
 function renderDetail(skill) {
   const repository = repositoryOf(skill);
   const repo = $("detail-repo");
@@ -472,6 +526,7 @@ function renderDetail(skill) {
   const name = $("detail-name");
   name.textContent = skill.name;
   name.append(...badges(skill));
+  renderStarButton(skill);
 
   const description = $("detail-description");
   description.textContent = skill.description || "(no description)";
@@ -638,7 +693,7 @@ function renderSummaryTable(repositories) {
   $("repo-rows").replaceChildren(...rows);
 }
 
-// The "Searched <owner>: …" line of each owner, or its error, under the summary table (spec section 5.11).
+// The "Searched <owner>: …" line of each owner, or its error, under the summary table (spec section 5.12).
 function renderOwnerLines(owners) {
   const lines = owners.map((owner) => owner.error
     ? element("li", "error", "error: " + owner.name + ": " + owner.error)

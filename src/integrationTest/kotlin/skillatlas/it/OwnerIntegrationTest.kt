@@ -14,7 +14,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.io.TempDir
 
-/** Every repository of an organization or user, in `scan`, `/api/scans` and the web view (spec section 5.11). */
+/** Every repository of an organization or user, in `scan`, `/api/scans` and the web view (spec section 5.12). */
 class OwnerIntegrationTest {
     @TempDir
     lateinit var dir: Path

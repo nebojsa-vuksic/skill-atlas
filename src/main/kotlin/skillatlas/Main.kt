@@ -47,7 +47,10 @@ fun main(args: Array<String>) {
     )
     val terminal = terminalStatus()
     val view = if (terminal.stdout) RichScanView() else PlainScanView(System.out, System.err)
-    val cli = SkillAtlasCli(scanner, ScanLog(ScanLog.defaultLocation()), view, interactive = terminal.stdin && terminal.stdout)
+    val cli = SkillAtlasCli(
+        scanner, ScanLog(ScanLog.defaultLocation()), StarStore(StarStore.defaultLocation()), view,
+        interactive = terminal.stdin && terminal.stdout,
+    )
     exitProcess(cli.run(args.toList()))
 }
 
@@ -64,6 +67,7 @@ private fun terminalStatus(): TerminalStatus = try {
 class SkillAtlasCli(
     private val scanner: Scanner,
     private val scanLog: ScanLog,
+    private val stars: StarStore,
     private val view: ScanView,
     private val out: PrintStream = System.out,
     private val err: PrintStream = System.err,
@@ -76,7 +80,9 @@ class SkillAtlasCli(
     private val multiScanner = MultiScanner(scanner)
 
     fun run(args: List<String>): Int {
-        val command = RootCommand().subcommands(ScanCommand(), BrowseCommand(), ServeCommand(), ShellCommand())
+        val command = RootCommand().subcommands(
+            ScanCommand(), BrowseCommand(), ServeCommand(), ShellCommand(), StarCommand(starring = true), StarCommand(starring = false), StarsCommand(),
+        )
         return try {
             // No arguments in a terminal opens the shell; elsewhere it stays a usage error (spec section 3.1).
             command.parse(if (args.isEmpty() && interactive) listOf("shell") else args)
@@ -118,7 +124,7 @@ class SkillAtlasCli(
 
         override fun run() {
             val server = try {
-                WebServer(scanner, scanLog, clock, err::println).start(port)
+                WebServer(scanner, scanLog, stars, clock, err::println).start(port)
             } catch (e: IOException) {
                 err.println("error: could not listen on 127.0.0.1:$port: ${e.message}")
                 throw ProgramResult(ExitCode.INTERNAL_ERROR)
@@ -140,7 +146,7 @@ class SkillAtlasCli(
                 err.println("error: ${NotATerminalException("shell").message}")
                 throw ProgramResult(ExitCode.USAGE)
             }
-            val session = ShellSession(scanner, scanLog, clock) { port, warn -> WebServer(scanner, scanLog, clock, warn).start(port) }
+            val session = ShellSession(scanner, scanLog, stars, clock) { port, warn -> WebServer(scanner, scanLog, stars, clock, warn).start(port) }
             shellView(session)
         }
     }
@@ -157,7 +163,7 @@ class SkillAtlasCli(
         override fun run() {
             try {
                 if (!interactive) throw NotATerminalException("browse")
-                BrowseView(onScanned = ::appendToScanLog).run { progress -> scanner.scan(url, progress) }
+                BrowseView(stars, onScanned = ::appendToScanLog).run { progress -> scanner.scan(url, progress) }
             } catch (e: SkillAtlasException) {
                 err.println("error: ${e.message}")
                 throw ProgramResult(e.exitCode)
@@ -181,19 +187,23 @@ class SkillAtlasCli(
         override fun help(context: Context) =
             "Scan the default branch of GitHub repositories, or of every repository of an organization or user, and list their skills."
 
+        /** Read before scanning, so a warning about the stars file never cuts into the rich view. */
+        private var starred: List<Star> = emptyList()
+
         override fun run() {
             if (filter != null && skill != null) {
                 err.println("error: --filter and --skill can't be used together")
                 throw ProgramResult(ExitCode.USAGE)
             }
-            // An owner URL always gets the several-repositories report, which says what was searched (spec section 5.11).
+            starred = stars.readOrWarn(err::println)
+            // An owner URL always gets the several-repositories report, which says what was searched (spec section 5.12).
             val owner = urls.any { runCatching { GitHubUrl.target(it) }.getOrNull() is ScanTarget.Owner }
             if (urls.size == 1 && !owner) scanOne(urls.single()) else scanMany(urls)
         }
 
         private fun scanOne(url: String) {
             val result = try {
-                view.show { progress -> present(scanner.scan(url, progress)) }.results.single()
+                view.show { progress -> present(scanner.scan(url, progress).withStars(starred)) }.results.single()
             } catch (e: SkillAtlasException) {
                 err.println("error: ${e.message}")
                 throw ProgramResult(e.exitCode)
@@ -218,7 +228,7 @@ class SkillAtlasCli(
         }
 
         /**
-         * Several repositories and owners (spec sections 5.10 and 5.11): each failure is reported after the
+         * Several repositories and owners (spec sections 5.10 and 5.12): each failure is reported after the
          * others, and the first one sets the exit code.
          */
         private fun scanMany(urls: List<String>) {
@@ -235,7 +245,7 @@ class SkillAtlasCli(
 
             try {
                 view.show { progress ->
-                    scan = multiScanner.scanAll(urls, progress)
+                    scan = multiScanner.scanAll(urls, progress).withStars(starred)
                     presentMany(scan)
                 }
             } catch (e: SkillAtlasException) {
@@ -253,6 +263,55 @@ class SkillAtlasCli(
             // With nothing scanned there is no skill to show; the summary and the errors say why.
             if (results.isEmpty()) return Presentation.MultiList(scan)
             return Presentation.detail(results, selector)
+        }
+    }
+
+    /** `star` and `unstar`: scan, find the skill like `--skill`, and change its star (spec section 5.11). */
+    private inner class StarCommand(private val starring: Boolean) : CoreCliktCommand(name = if (starring) "star" else "unstar") {
+        private val url by argument(
+            name = "github-project-url",
+            help = "Repository of the skill, e.g. https://github.com/owner/repo",
+        )
+        private val selector by argument(name = "name-or-path", help = "The skill's name or directory path, as for scan --skill")
+
+        override fun help(context: Context) =
+            if (starring) "Scan a GitHub repository and star one of its skills." else "Scan a GitHub repository and remove a skill's star."
+
+        override fun run() {
+            var scanned: ScanResult? = null
+            try {
+                view.show { progress ->
+                    val result = scanner.scan(url, progress).also { scanned = it }
+                    val skill = Presentation.findSkill(result, selector)
+                    val repository = result.repository.fullName
+                    val changed = if (starring) stars.star(repository, skill) else stars.unstar(repository, skill)
+                    Presentation.StarChanged(result, skill, starring, changed)
+                }
+            } catch (e: SkillAtlasException) {
+                // A scan that succeeded still counts for the scan log, even if the star couldn't be changed.
+                scanned?.let(::appendToScanLog)
+                err.println("error: ${e.message}")
+                throw ProgramResult(e.exitCode)
+            } catch (e: Exception) {
+                err.println("error: unexpected failure: ${e.message ?: e.javaClass.name}")
+                throw ProgramResult(ExitCode.INTERNAL_ERROR)
+            }
+            scanned?.let(::appendToScanLog)
+        }
+    }
+
+    /** `stars`: lists the stars file, without scanning (spec section 5.11). */
+    private inner class StarsCommand : CoreCliktCommand(name = "stars") {
+        override fun help(context: Context) = "List every starred skill."
+
+        override fun run() {
+            val list = try {
+                stars.read()
+            } catch (e: StarsFileException) {
+                err.println("error: ${e.message}")
+                throw ProgramResult(e.exitCode)
+            }
+            view.show { Presentation.StarList(list) }
         }
     }
 

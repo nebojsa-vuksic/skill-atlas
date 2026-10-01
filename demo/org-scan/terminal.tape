@@ -1,4 +1,4 @@
-# Terminal demo: every repository of an organization (spec sections 5.11 and 13).
+# Terminal demo: every repository of an organization (spec sections 5.12 and 13).
 Require skill-atlas
 Set Shell "bash"
 Set FontSize 16

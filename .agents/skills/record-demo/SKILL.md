@@ -18,7 +18,7 @@ permission is needed. Everything lives in `demo/`:
 
 You need `ffmpeg`, plus `vhs` (`brew install vhs`, which also brings `ffmpeg` and `ttyd`),
 Node.js, and a `gh` login. `record.sh` gets a `GITHUB_TOKEN` from `gh auth token`, and it
-uses a temporary scan log so demo scans never go into yours.
+uses a temporary scan log and stars file, so demo scans and stars never go into yours.
 
 ## Narration
 
