@@ -9,18 +9,25 @@ object SkillFilter {
     private val WHITESPACE = Regex("\\s+")
 
     private const val REPO_PREFIX = "repo:"
+    private const val STARRED = "is:starred"
 
-    /** A parsed query: the words to find in skills, and the `repo:` qualifiers (spec section 5.10). */
-    data class Query(val words: List<String>, val repositories: List<String>) {
+    /**
+     * A parsed query: the words to find in skills, the `repo:` qualifiers (spec section 5.10),
+     * and whether `is:starred` keeps only starred skills (spec section 5.11).
+     */
+    data class Query(val words: List<String>, val repositories: List<String>, val starred: Boolean = false) {
         /** True when [repository] (`owner/name`) passes the `repo:` qualifiers; any one of them is enough. */
         fun matchesRepository(repository: String): Boolean =
             repositories.isEmpty() || repositories.any { it in repository.lowercase() }
+
+        /** True when [skill] passes `is:starred` and has every word; the repository is checked separately. */
+        fun matches(skill: Skill): Boolean = (!starred || skill.starred) && matches(skill, words)
     }
 
     fun parse(query: String): Query {
         val tokens = query.lowercase().split(WHITESPACE).filter { it.isNotEmpty() }
-        val (repositories, words) = tokens.partition { it.startsWith(REPO_PREFIX) }
-        return Query(words, repositories.map { it.removePrefix(REPO_PREFIX) }.filter { it.isNotEmpty() })
+        val (repositories, words) = tokens.filter { it != STARRED }.partition { it.startsWith(REPO_PREFIX) }
+        return Query(words, repositories.map { it.removePrefix(REPO_PREFIX) }.filter { it.isNotEmpty() }, STARRED in tokens)
     }
 
     /** The query's words, lowercased and without `repo:` qualifiers; an empty list matches every skill. */
@@ -34,6 +41,8 @@ object SkillFilter {
     }
 
     fun filter(skills: List<Skill>, words: List<String>): List<Skill> = skills.filter { matches(it, words) }
+
+    fun filter(skills: List<Skill>, query: Query): List<Skill> = skills.filter(query::matches)
 
     /** Every range of [text] where one of [words] occurs, merged and sorted. */
     fun matchRanges(text: String, words: List<String>): List<IntRange> {

@@ -13,7 +13,7 @@ sealed interface Presentation {
         val skills: List<Skill> = when {
             query == null -> result.skills
             !SkillFilter.parse(query).matchesRepository(result.repository.fullName) -> emptyList()
-            else -> SkillFilter.filter(result.skills, words.orEmpty())
+            else -> SkillFilter.filter(result.skills, SkillFilter.parse(query))
         }
     }
 
@@ -27,6 +27,35 @@ sealed interface Presentation {
     ) : Presentation {
         val content: String? get() = result.contents[skill.path]
         val githubUrl: String get() = githubFileUrl(result, skill.path)
+    }
+
+    /** What `star` or `unstar` did to [skill]: [starred] is its new state, and [changed] is false when it already had it (spec section 5.11). */
+    data class StarChanged(val result: ScanResult, val skill: Skill, val starred: Boolean, val changed: Boolean) : Presentation {
+        override val results: List<ScanResult> get() = listOf(result)
+
+        val id: String get() = skillId(result.repository.fullName, skill.path)
+
+        /** The text before the skill's name, e.g. `Starred `. */
+        val before: String get() = if (!changed) "" else if (starred) "Starred " else "Unstarred "
+
+        /** The text between the name and the id, e.g. ` is already starred (`. */
+        val after: String get() = when {
+            changed -> " ("
+            starred -> " is already starred ("
+            else -> " isn't starred ("
+        }
+
+        /** e.g. `Starred pdf (acme/skills:skills/pdf).` */
+        val message: String get() = "$before${sanitize(skill.name)}$after${sanitize(id)})."
+    }
+
+    /** `stars`: every starred skill, in file order (spec section 5.11). Nothing was scanned. */
+    data class StarList(val stars: List<Star>) : Presentation {
+        override val results: List<ScanResult> get() = emptyList()
+
+        /** e.g. `2 starred skills`, or `No starred skills yet.` */
+        val heading: String
+            get() = if (stars.isEmpty()) "No starred skills yet." else "${stars.size} starred ${if (stars.size == 1) "skill" else "skills"}"
     }
 
     /** Several repositories: one list per scanned repository, in URL order (spec section 5.10). */
@@ -84,10 +113,17 @@ sealed interface Presentation {
             }
         }
 
-        /** The skill named by `--skill`: a directory path (copies included) first, then a name, ignoring case. */
+        /** The skill named by `--skill`, with its similar skills and content. */
         fun detail(result: ScanResult, selector: String): SkillDetail {
+            val skill = findSkill(result, selector)
+            val similar = SkillSimilarity.compute(result.skills, result.contents).getValue(skill.path)
+            return SkillDetail(result, skill, similar)
+        }
+
+        /** The skill named by `--skill`, `star` or `unstar`: a directory path (copies included) first, then a name, ignoring case. */
+        fun findSkill(result: ScanResult, selector: String): Skill {
             val value = selector.trim().removeSuffix("/")
-            val skill = result.skills.firstOrNull { value == it.path || value in it.alsoAt }
+            return result.skills.firstOrNull { value == it.path || value in it.alsoAt }
                 ?: result.skills.filter { it.name.equals(value, ignoreCase = true) }.let { named ->
                     when (named.size) {
                         0 -> throw SkillNotFoundException(selector, result.repository.fullName)
@@ -95,8 +131,6 @@ sealed interface Presentation {
                         else -> throw AmbiguousSkillException(selector, named.map { it.path })
                     }
                 }
-            val similar = SkillSimilarity.compute(result.skills, result.contents).getValue(skill.path)
-            return SkillDetail(result, skill, similar)
         }
     }
 }

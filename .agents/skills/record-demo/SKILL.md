@@ -67,6 +67,9 @@ Demos are recorded **only on CI**, where fonts and rendering match the baselines
 - **An interactive view** (`browse`, the shell): keys like `Down`, `Tab` and `Enter` respond
   in-process, so a short `Sleep` is enough after them. VHS can't read a live input line, so
   don't `Wait` for it.
+- **Stars and other saved state:** the sandbox points `XDG_DATA_HOME` and `XDG_STATE_HOME` at
+  temporary folders, so demos never read or change your real stars or scan log. A demo
+  that stars skills (`web-stars`) starts from no stars every run.
 - **Breaking it on purpose** (spec 13.8): on a throwaway branch, hide something users see.
   Check that the Demos job fails with red in the diff, then delete the branch unmerged.
 

@@ -4,6 +4,7 @@ import com.jakewharton.mosaic.testing.runMosaicTest
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class RichReportTest {
     private val sha = "3f2a9c1e8b7d6a5f4e3d2c1b0a9f8e7d6c5b4a39"
@@ -138,5 +139,20 @@ class RichReportTest {
             assertEquals(expected, snapshot.lines().map { it.trimEnd() }.take(expected.size))
         }
         assertEquals(true, " SKILL ATLAS   anthropics/skills  3f2a9c1e8b7d main" in snapshot)
+    }
+
+    @Test
+    fun `tags starred skills and shows star changes and the star list`() {
+        val result = ScanResult(repository, "main", sha, listOf(Skill("pdf", "Read PDF files.", "skills/pdf", starred = true)))
+
+        assertTrue(" ● pdf  ★ starred" in render(result), render(result))
+        val skill = result.skills.single()
+        assertEquals(" ★ Starred pdf (anthropics/skills:skills/pdf).", render(Presentation.StarChanged(result, skill, starred = true, changed = true)))
+        assertEquals(" ☆ pdf isn't starred (anthropics/skills:skills/pdf).", render(Presentation.StarChanged(result, skill, starred = false, changed = false)))
+        assertEquals(
+            listOf(" 2 starred skills", "", " ★ mps-tests  JetBrains/MPS:.agents/skills/mps-tests", " ★ pdf        anthropics/skills:skills/pdf"),
+            render(Presentation.StarList(listOf(Star("JetBrains/MPS", ".agents/skills/mps-tests", "mps-tests"), Star("anthropics/skills", "skills/pdf", "pdf")))).lines(),
+        )
+        assertEquals(" No starred skills yet.", render(Presentation.StarList(emptyList())))
     }
 }

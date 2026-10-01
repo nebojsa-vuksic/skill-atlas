@@ -1,12 +1,15 @@
 package skillatlas
 
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.io.TempDir
 
-/** Every key of `browse` in every focus area (spec section 5.8). */
+/** Every key of `browse` in every focus area (spec sections 5.8 and 5.11). */
 class BrowseStateTest {
     private val skills = listOf(
         Skill("commits", "How to write commit messages.", "skills/commits"),
@@ -199,5 +202,69 @@ class BrowseStateTest {
         assertFalse(state.onKey("x"))
         state.onKey("/")
         assertFalse(state.onKey("Tab"))
+    }
+
+    private fun starredState(dir: Path): Pair<BrowseState, StarStore> {
+        val stars = StarStore(dir.resolve("stars.json"))
+        stars.star("acme/skills", skills[1])
+        val result = ScanResult(RepositoryMetadata("acme/skills", null, "main"), "main", "c".repeat(40), skills).withStars(stars.read())
+        return BrowseState(result, similar, stars) to stars
+    }
+
+    @Test
+    fun `s stars and unstars the selected skill and saves it at once`(@TempDir dir: Path) {
+        val (state, stars) = starredState(dir)
+        assertEquals(listOf(false, true, false, false), state.result.skills.map { it.starred })
+
+        assertTrue(state.onKey("s"))
+        assertTrue(state.selected!!.starred)
+        assertEquals(listOf("acme/skills:skills/commits", "acme/skills:skills/mps-tests"), stars.read().map { it.id })
+
+        state.onKey("ArrowDown")
+        state.onKey("s")
+        assertFalse(state.selected!!.starred)
+        assertEquals(listOf("acme/skills:skills/commits"), stars.read().map { it.id })
+    }
+
+    @Test
+    fun `with is starred in the filter, an unstarred skill leaves the list`(@TempDir dir: Path) {
+        val (state, stars) = starredState(dir)
+        stars.star("acme/skills", skills[3])
+        val both = BrowseState(state.result.withStars(stars.read()), similar, stars)
+        both.onKey("/")
+        both.type("is:starred")
+        both.onKey("Enter")
+        assertEquals(listOf("mps-tests", "pdf"), both.visible.map { it.name })
+        assertEquals("skills/mps-tests", both.selectedPath)
+
+        both.onKey("s")
+
+        assertEquals(listOf("pdf"), both.visible.map { it.name })
+        assertEquals("skills/pdf", both.selectedPath)
+        // The filter's own words aren't typed into the list: s in the filter is a letter.
+        both.onKey("/")
+        both.onKey("s")
+        assertEquals("is:starreds", both.query)
+    }
+
+    @Test
+    fun `a stars file error shows in the bottom line until the next key`(@TempDir dir: Path) {
+        val file = dir.resolve("stars.json").also { Files.writeString(it, "{broken") }
+        val state = BrowseState(ScanResult(RepositoryMetadata("acme/skills", null, "main"), "main", "c".repeat(40), skills), similar, StarStore(file))
+
+        state.onKey("s")
+
+        assertEquals(Span("error: could not read stars $file: not valid stars JSON", Look.ERROR), state.notice)
+        assertFalse(state.selected!!.starred)
+        assertEquals("{broken", Files.readString(file))
+        state.onKey("ArrowDown")
+        assertNull(state.notice)
+    }
+
+    @Test
+    fun `s does nothing without a stars file`() {
+        val state = state()
+        assertFalse(state.onKey("s"))
+        assertFalse(state.selected!!.starred)
     }
 }

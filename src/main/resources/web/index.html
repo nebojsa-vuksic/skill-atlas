@@ -50,6 +50,8 @@
             <span class="filter-icon" aria-hidden="true">🔍</span>
             <input id="filter" class="filter-input" type="search" placeholder="Filter skills"
                    aria-label="Filter skills" aria-controls="skills" spellcheck="false" autocomplete="off">
+            <button id="starred-only" class="starred-only" type="button" aria-pressed="false"
+                    title="Show only starred skills" aria-label="Show only starred skills">★</button>
             <span id="filter-count" class="filter-count" aria-live="polite"></span>
           </div>
           <p id="no-match" class="no-match" hidden></p>
@@ -61,6 +63,7 @@
           <header>
             <p id="detail-repo" class="detail-repo" hidden></p>
             <h2 id="detail-name" class="detail-name"></h2>
+            <button id="star-button" class="star-button" type="button" aria-pressed="false" title="Star or unstar this skill (s)"></button>
             <p id="detail-description" class="detail-description"></p>
             <div id="detail-paths" class="detail-paths"></div>
             <a id="detail-github" class="github-link" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>

@@ -126,7 +126,9 @@ completion), `ShellState.kt` (history and keys), `ShellSession.kt` (commands) an
 **Why:** the owner asked for "a rich, interactive CLI … similar to the Claude CLI". Without
 a terminal the old usage error stays, so scripts don't hang on a prompt.
 **How to apply:** a new command is a row in `ShellCommands.ALL` plus a branch in
-`ShellSession.execute`, with a unit test and a line in the spec's command table.
+`ShellSession.execute`, with a unit test and a line in the spec's command table. Expect the
+palette tests in `ShellStateTest`, `ShellScreenTest` and `ShellCompletionTest` to change:
+they pin the order and count of `/` and `/s` matches.
 
 ## Demo narration: an original voice, from local Kokoro (2026-09-30)
 
@@ -175,3 +177,24 @@ exist only in the UI. Pointing to the file means review rules are versioned and 
 like code. The owner wants findings only, with no nit comments.
 **How to apply:** change review behavior by editing that file, not the UI. If you change a
 trigger or connector in the UI, update the Setup table in the file to match.
+
+## Stars: one file for every view, applied when skills are shown (2026-10-01)
+
+Stars live in `$XDG_DATA_HOME/skill-atlas/stars.json`, keyed by `owner/repo` and path, and
+match a skill through its main path or any `also in` copy (spec 5.11). Views call
+`ScanResult.withStars` each time they *show* skills; the scan, `ScanCache` and the shell's
+current repository never hold stars. Favourites are a filter qualifier, `is:starred`, not a
+separate view, so the filter rules in `SkillFilter.kt` and `app.js` changed together again.
+
+**Why:** the owner asked for stars "both in the web UI and the CLI"; one file means a star set
+in `browse` shows in the browser. Reading at display time keeps cached scans correct.
+**How to apply:** new views mark results with `withStars`; don't add stars to `Skill` in the scanner.
+
+## The web view's only write: POST /api/star (2026-10-01)
+
+It needs `Content-Type: application/json` (415 otherwise) and a same-origin `Origin` when one
+is sent (403). Other sites can't send JSON without a CORS preflight, which is never answered.
+The page sends the skill's `also_at`, because the server's scan cache may have expired.
+
+**How to apply:** any future write endpoint uses the same two checks, with tests for both.
+

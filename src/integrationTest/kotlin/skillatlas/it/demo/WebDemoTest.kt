@@ -187,6 +187,57 @@ class WebDemoTest {
         }
     }
 
+    @Test
+    fun `web-stars`() {
+        val lines = listOf(
+            "Some skills you reach for every day. Let's star them.",
+            "Pick a skill and hit the star. It's saved right away.",
+            "Or just press S. Starred skills get a gold star in the list.",
+            "This star by the filter shows only your favourites.",
+            "It's the is starred filter, so it mixes with words. One favourite mentions Word.",
+            "Reload, and they're still starred. The terminal sees the very same stars.",
+        )
+        WebDemo("web-stars", browser, lines).use { demo ->
+            val page = demo.page
+            page.navigate(web.url)
+            demo.idle()
+            demo.type("#url", "github.com/${DemoFixtures.SKILLS}", 45.0)
+            page.click("#scan-button")
+            demo.idle()
+            demo.say(lines[0])
+
+            demo.skill("pdf-toolkit").click()
+            page.click("#star-button")
+            page.waitForSelector("#star-button[aria-pressed=true]")
+            demo.say(lines[1])
+            demo.moment("01-star-button")
+
+            for (name in listOf("spreadsheet", "docx-editor")) {
+                demo.skill(name).click()
+                page.keyboard().press("s")
+                demo.skill(name).locator(".star-icon").waitFor()
+            }
+            demo.say(lines[2])
+            demo.moment("02-star-key")
+
+            page.click("#starred-only")
+            demo.say(lines[3])
+            demo.moment("03-starred-only")
+
+            page.locator("#filter").press("End")
+            demo.type("#filter", " word", 110.0)
+            demo.say(lines[4])
+            demo.moment("04-starred-words")
+
+            page.locator("#filter").press("Escape")
+            page.reload()
+            demo.idle()
+            page.click("#starred-only")
+            demo.say(lines[5])
+            demo.moment("05-after-reload")
+        }
+    }
+
     companion object {
         private lateinit var playwright: Playwright
         private lateinit var browser: Browser

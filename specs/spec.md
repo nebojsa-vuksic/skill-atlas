@@ -32,6 +32,9 @@ skill-atlas shell
 skill-atlas scan <github-project-url>... [--filter <words>] [--skill <name-or-path>]
 skill-atlas browse <github-project-url>
 skill-atlas serve [--port <port>]
+skill-atlas star <github-project-url> <name-or-path>
+skill-atlas unstar <github-project-url> <name-or-path>
+skill-atlas stars
 skill-atlas --help
 skill-atlas --version
 ```
@@ -45,6 +48,7 @@ before.
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `<github-project-url>` | yes | URL of the GitHub repository to scan. See 3.3 for accepted forms. |
+| `<name-or-path>` | `star` and `unstar` only | The skill to star or unstar, found like `--skill` (sections 5.7 and 5.11). |
 
 ### 3.3 Accepted URL forms
 
@@ -220,6 +224,7 @@ Each part of the report is highlighted:
 
 | Part | Style |
 |------|-------|
+| `★ starred` (section 5.11) | bold yellow |
 | `SKILL ATLAS` title | bold, inverted |
 | Labels (`Repository`, `Description`, `Commit`) | dim |
 | Repository name | bold cyan |
@@ -277,7 +282,8 @@ Rules:
 - `Description:` shows `(none)` when the repository has no description.
 - `Commit:` shows the full SHA, followed by the default branch name in parentheses.
 - When no skills are found, the header is followed by `No skills found.`
-- Tags follow the skill name in this order: `[shipped in product]`, then `[warning: …]`.
+- Tags follow the skill name in this order: `[starred]` (section 5.11), then
+  `[shipped in product]`, then `[warning: …]`.
 - Each identical copy adds an `also in <path>` line under the main path.
 - If test fixtures were ignored, the report ends with a blank line, then
   `Ignored <n> test fixture(s) (not skills):`, then one indented path per fixture. This
@@ -370,6 +376,7 @@ pane:
 
   Paths, `also in` copies, and full labels appear only in the right pane. In the list,
   labels shrink to small icons at the right end of the name line, each with a tooltip:
+  - `★` for *starred* (section 5.11), in amber
   - `◆` for *shipped in product*
   - `⚠` for warnings, with the warnings as the tooltip
   - `⧉ <n>` when the skill has `<n>` identical copies
@@ -378,7 +385,7 @@ pane:
   vertical padding. Hovering an item tints its background. The selected item gets a 3 px
   accent bar on the left, a tinted background, and `aria-selected="true"`.
 - **Right, the selected skill.** This pane shows:
-  - the skill name and its badges
+  - the skill name and its badges, then the star button (section 5.11)
   - the **full** description, not the shortened one
   - the main path and its `also in` copies
   - a **View on GitHub** link to
@@ -423,7 +430,7 @@ Markdown is rendered on the server, with these rules:
   "repository": {"name": "acme/skills", "description": "Acme agent skills", "branch": "main", "commit": "<sha>"},
   "skills": [
     {"name": "pdf-extract", "description": "<full>", "short_description": "<shortened>", "path": "skills/pdf",
-     "also_at": [], "shipped": false, "warnings": [],
+     "also_at": [], "shipped": false, "starred": false, "warnings": [],
      "content": "---\nname: pdf-extract\n…", "content_html": "<h1>PDF</h1>\n…",
      "similar": [{"path": "skills/docx", "name": "docx", "score": 31}]}
   ],
@@ -433,7 +440,7 @@ Markdown is rendered on the server, with these rules:
 
 `content` is the skill file's exact text, and `content_html` is its rendered Markdown
 body (see "Rendering skill content safely" above). Both are `null` when the content isn't
-available.
+available. `starred` says whether the skill is starred (section 5.11).
 
 Failures return `{"error": "<message>", "exit_code": <code>}`, with the message and code
 from section 7. The HTTP status depends on the exit code:
@@ -452,7 +459,7 @@ Every successful scan made through the API appends one line to the scan log.
 - The server listens on `127.0.0.1` only.
 - It rejects requests whose `Host` header is not `127.0.0.1:<port>` or
   `localhost:<port>` with `403`. This blocks DNS rebinding.
-- It answers only `GET`; other methods get `405`.
+- It answers only `GET`, plus `POST` on `/api/star` (section 5.11); other methods get `405`.
 - It serves a strict `Content-Security-Policy` (`default-src 'self'`).
 - The page inserts repository content as text, never as HTML.
 
@@ -464,12 +471,14 @@ descriptions. It runs in the page and needs no API call.
 - **Field.** A search field with a 🔍 icon and the placeholder `Filter skills` sits at the
   top of the left pane. On its right, a count pill shows `<visible> of <total>`, e.g.
   `5 of 41`. The pill is accent-colored while a filter is active and muted otherwise.
+  Between the field and the pill, a `★` button shows only starred skills (section 5.11).
 - **Matching:**
   - The query is split on whitespace into words.
   - Matching is case-insensitive.
   - A skill matches when **every** word is a substring of its name or of its **full**
     description.
   - An empty query shows every skill.
+  - `is:starred` keeps only starred skills (section 5.11). It isn't a word to find.
   - The list updates on every keystroke and keeps the original order.
 - **Highlighting.** Matched text is wrapped in `<mark>` in each visible item's name and
   description line. If a word matches only past the shortened description, the item's
@@ -651,7 +660,7 @@ version of the web view in the terminal. It is built with Mosaic.
                                   │ SKILL.md
                                   │ ---
                                   │ name: mps-tests
- ↑↓ select  / filter  tab similar  pgup/pgdn scroll  q quit
+ ↑↓ select  / filter  s star  tab similar  pgup/pgdn scroll  q quit
 ```
 
 **Layout:**
@@ -662,8 +671,8 @@ version of the web view in the terminal. It is built with Mosaic.
     filter has focus, or a dim `/ filter` placeholder when empty. The `<n> of <total>`
     count is right-aligned on the same line, accent-colored while a filter is active.
   - A rule follows, then the skills, each with the compact look of section 5.4: a name
-    line with icons (`◆`, `⚠`, and `⧉n` written without a space, e.g. `⧉2`) at the right
-    end, and one dim description line.
+    line with icons (`★` in bold yellow, `◆`, `⚠`, and `⧉n` written without a space,
+    e.g. `⧉2`) at the right end, and one dim description line.
     Both lines are cut with `…` to fit, and a blank line follows each skill.
   - Matches are highlighted as in section 5.7. The selected skill has a `▌` accent bar and
     a bold name.
@@ -676,7 +685,8 @@ version of the web view in the terminal. It is built with Mosaic.
   - `Similar skills`, with rows like the ones in section 5.7.
   - `SKILL.md`, with the file text wrapped to the pane width.
   - Content that doesn't fit is scrolled with PgUp and PgDn.
-- **Bottom line:** the key help for the current focus, dim.
+- **Bottom line:** the key help for the current focus, dim. After a star change fails, it
+  shows the `error: …` message in red instead, until the next key (section 5.11).
 
 **Keys.** There are three focus areas: the list (the default), the filter, and similar
 skills.
@@ -687,6 +697,7 @@ skills.
 | List | `/` | Focus the filter |
 | List | Tab | Focus similar skills (if the selected skill has any) |
 | List | Esc | Clear the filter |
+| List | `s` | Star or unstar the selected skill, and save it at once (section 5.11) |
 | List | PgUp / PgDn | Scroll the right pane by its height minus one line |
 | List | `q`, Ctrl-C | Quit |
 | Filter | printable characters, Backspace | Edit the query; the list updates at once |
@@ -730,7 +741,11 @@ with Mosaic, and it uses the same core and the same rich renderers as `scan` (se
 ▸ /scan <url>              Scan a GitHub repository and make it the current one
   /skill <name-or-path>    Show one skill: description, paths, similar skills, SKILL.md
   /similar <name-or-path>  Show the skills most similar to one skill
+  /star <name-or-path>     Star a skill of the current repository
+  /stars                   List every starred skill
   /serve [port]            Start the web view in the background; /serve stop stops it
+  /unstar <name-or-path>   Remove a skill's star
+  /browse                  Browse the current repository full-screen; q returns here
 ```
 
 **Prompt.** A bold cyan `❯ `, then the input with a block cursor (inverted). While the
@@ -758,9 +773,9 @@ and a dim one-line description.
 - **Enter** runs the selected command. If the command needs an argument, Enter completes
   it like Tab instead.
 
-**Skill names.** Once there is a current repository, typing `/skill ` or `/similar `
-(for example after completing it with Tab) opens the same palette with the repository's
-skills. Each row shows a skill name and its shortened description (section 5.3), matched
+**Skill names.** Once there is a current repository, typing `/skill `, `/similar `,
+`/star ` or `/unstar ` (for example after completing it with Tab) opens the same palette
+with the repository's skills. Each row shows a skill name and its shortened description (section 5.3), matched
 and ranked against the text after the space by the same rules as commands. A name that
 several skills share is offered as each skill's path instead, so every suggestion is
 unambiguous. Tab completes the selection into the input, and Enter runs the command on
@@ -775,6 +790,9 @@ Enter runs the input as typed.
 | `/filter <words>` | yes | Lists the matching skills, like `scan --filter`, in the rich view (section 5.7). Without words, lists every skill. |
 | `/skill <name-or-path>` | yes | Shows one skill, like `scan --skill` (section 5.7). |
 | `/similar <name-or-path>` | yes | Shows only that skill's similar-skills table: `Similar to <name>`, then the rows of section 5.7. |
+| `/star <name-or-path>` | yes | Stars a skill of the current repository, like `skill-atlas star` (section 5.11). |
+| `/unstar <name-or-path>` | yes | Removes a skill's star, like `skill-atlas unstar`. |
+| `/stars` | no | Lists every starred skill, like `skill-atlas stars`. |
 | `/browse` | yes | Opens the full-screen `browse` view (section 5.8) on the current repository. `q` or Ctrl-C returns to the shell. |
 | `/repo` | yes | Shows the current repository's summary: name, description, commit and branch, and the skill count. |
 | `/serve [port]` | no | Starts the web view (section 5.4) in the background, on port `8421` unless given, `0` for any free port, and prints `Skill Atlas web view: <url>`. `/serve stop` stops it. |
@@ -784,7 +802,7 @@ Enter runs the input as typed.
 
 - **No repository yet.** A command that needs a repository says
   `No repository yet — run /scan <url> first.` in yellow, and does nothing else.
-- **Missing arguments.** `/scan`, `/skill` and `/similar` without an argument print
+- **Missing arguments.** `/scan`, `/skill`, `/similar`, `/star` and `/unstar` without an argument print
   `error: usage: /<command> <argument>`, e.g. `error: usage: /scan <url>`.
 - **Unknown commands** print `error: unknown command /<name>; type /help for the list`.
 - **Text without `/`.** Enter on input that doesn't start with `/` is a `/filter` with
@@ -936,6 +954,153 @@ repository's name, so the list points you to related skills elsewhere.
     therefore scans only the new one, and removing one scans nothing. Similar skills are
     always recomputed over the requested set. Failed repositories are never cached.
 
+### 5.11 Starred skills
+
+Starring a skill marks it as a favourite. Stars belong to the user, not to a repository.
+They are kept on this machine and shared by every view. A skill starred with
+`skill-atlas star`, in `browse`, in the shell or in the web view shows as starred in all
+the others. Starred skills keep their place in every list; the `is:starred` filter lists
+only them.
+
+**Identity.** A star names a skill by its repository (`owner/name`, the `full_name` from the
+GitHub API) and its directory path, like the ids of section 5.10. A skill is **starred**
+when a star has its repository, ignoring case, and either its main path or one of its
+`also in` copies. So a star still holds when an identical copy is added later and becomes
+the main path (section 4.4).
+- **Starring** saves the skill's main path and name.
+- **Unstarring** removes every star that matches the skill.
+
+**Stars file.**
+- **Location:** `$XDG_DATA_HOME/skill-atlas/stars.json`, or
+  `~/.local/share/skill-atlas/stars.json` when `XDG_DATA_HOME` is not set or not an
+  absolute path. The directory is created by the first star.
+- **Format:** JSON, pretty-printed with 4-space indents and ending in a new line. Stars are
+  sorted by repository (ignoring case), then by path. `name` is the skill's name when it
+  was starred, so `stars` can list them without scanning. Unknown keys are ignored.
+
+```json
+{
+    "stars": [
+        {
+            "repository": "JetBrains/MPS",
+            "path": ".agents/skills/mps-tests",
+            "name": "mps-tests"
+        }
+    ]
+}
+```
+
+- **No file** means no stars.
+- **Changes** read the file again, apply the change, and replace the file atomically: they
+  write a temporary file in the same directory, then rename it. A star changed from
+  another view in the meantime isn't lost, and a crash never leaves half a file.
+- **A file that can't be read,** or isn't valid stars JSON, is never overwritten.
+  - Views that only *show* stars warn and show no stars. The warning is
+    `warning: could not read stars <file>: <reason>`. `scan` and `serve` print it to
+    stderr, the shell prints it inline in yellow, and `browse` shows it in its bottom line.
+    The scan still succeeds, with its usual exit code.
+  - Changing a star fails with `error: could not read stars <file>: <reason>`.
+  - A file that can't be written fails with `error: could not save stars <file>: <reason>`.
+  - Both errors exit `1` from the CLI (section 7).
+
+**Filter.** `is:starred` in a filter query (sections 5.5 and 5.10) keeps only starred
+skills. It combines with words and with `repo:`, is never highlighted, and works everywhere
+the filter works: the web view, `scan --filter`, `browse` and the shell's `/filter`. Any
+other `is:` word is an ordinary word.
+
+#### CLI
+
+**Markers in `scan`.** A starred skill is tagged in the list and in `--skill`, with one
+repository or several:
+- **Plain format:** `[starred]`, the first tag (section 5.2), e.g.
+  `  mps-tests  [starred]  [shipped in product]`.
+- **Rich view:** `★ starred` in bold yellow, the first tag.
+
+**`skill-atlas star <url> <name-or-path>`** scans the repository like `scan`, finds the
+skill by the rules of `--skill` (section 5.7), and stars it.
+- **Scan:** the same status line or progress messages as `scan`, and one scan log line.
+- **Output:** one line on stdout: `Starred <name> (<owner>/<repo>:<path>).`, or
+  `<name> is already starred (<owner>/<repo>:<path>).` when it was. Both exit `0`.
+- **Rich view:** the line starts with a bold yellow `★ `, the name is bold cyan, and the id
+  is dim.
+- **Errors:** a skill that isn't found exits `6`, and an ambiguous name exits `2`, with the
+  messages of section 5.7. A stars file error exits `1`.
+
+**`skill-atlas unstar <url> <name-or-path>`** does the same, but removes the star:
+`Unstarred <name> (<owner>/<repo>:<path>).`, or `<name> isn't starred (<owner>/<repo>:<path>).`
+In the rich view, the line starts with a dim `☆ `.
+
+**`skill-atlas stars`** lists the stars from the file. It doesn't scan or use the network,
+and it doesn't write the scan log.
+
+```
+2 starred skills:
+
+  mps-tests  JetBrains/MPS:.agents/skills/mps-tests
+  pdf        anthropics/skills:skills/pdf
+```
+
+- **Rows:** in file order, each the star's name padded to the longest, then its id.
+- **Count line:** `1 starred skill:` for one. With no stars it's `No starred skills yet.`
+  and nothing else.
+- **Rich view:** the count line is bold green, or yellow when there are no stars. Each row
+  starts with a bold yellow `★`, then the name in bold cyan and the id dim.
+- **Errors:** a file that can't be read exits `1`.
+
+#### `browse` and the shell
+
+- **`browse`:** `s` (list focus) stars or unstars the selected skill, and saves it at once.
+  - **Marks:** a starred skill has a bold yellow `★` as its first list icon, and
+    `★ starred` as its first tag in the right pane.
+  - **Filter:** with `is:starred` in the filter, unstarring a skill drops it from the list,
+    and the first visible skill is selected, as when typing (section 5.5).
+  - **Errors:** a stars file error shows `error: <message>` in red in the bottom line until
+    the next key, and the star stays as it was.
+- **Shell:** `/star <name-or-path>` and `/unstar <name-or-path>` work on the current
+  repository and print the lines of `skill-atlas star` and `unstar`. `/stars` lists every
+  star, like `skill-atlas stars`. A stars file error prints `error: <message>` inline. The
+  shell reads the stars file each time it shows skills, so stars changed in `/browse`, in
+  the web view, or by another process show up in the next command.
+
+#### Web view
+
+- **Marks:** a starred skill has the `★` icon in the list (section 5.4).
+- **Star button:** the right pane has a button after the skill name. It shows `☆ Star`
+  when the skill isn't starred and `★ Starred` when it is, with `aria-pressed`.
+  - Clicking it toggles the star. So does `s`, when focus isn't in a text field.
+  - The page changes the button, the list icon and the filter once the server confirms the
+    change.
+  - If the change fails, the error line shows `error: <message>`, and the star stays as it
+    was.
+- **Starred only:** the `★` button next to the filter field (section 5.5) adds
+  `is:starred` to the query, or removes it. It's pressed (`aria-pressed="true"`) while the
+  query contains `is:starred`. Like every query, it's kept in the URL as `&q=`.
+- **Fresh stars:** stars are read when each `/api/scan` and `/api/scans` response is built,
+  even from cached results (section 5.10). A star set elsewhere shows after the next scan
+  or a reload.
+
+**API.** Each skill in `GET /api/scan` and `GET /api/scans` has `"starred": true` or
+`false`, right after `"shipped"`.
+
+`POST /api/star` stars or unstars one skill. The body has the skill's fields from
+`/api/scans`, and `starred` says what to do:
+
+```json
+{"repository": "acme/skills", "path": "skills/pdf", "also_at": [], "name": "pdf-extract", "starred": true}
+```
+
+- **Success:** `200` with `{"starred": <bool>}`, the skill's new state. Starring a starred
+  skill, or unstarring one that isn't, also succeeds.
+- **Cross-site requests:** the body must be sent as `Content-Type: application/json`,
+  otherwise the answer is `415`. A cross-site page can only send that type after a CORS
+  preflight, and the server never answers one. An `Origin` header other than
+  `http://127.0.0.1:<port>` or `http://localhost:<port>` gets `403`.
+- **Bad requests:** a body over 64 KB, invalid JSON, or a missing field gets `400` with
+  `{"error": "invalid star request: <reason>", "exit_code": 2}`.
+- **Stars file errors:** `500` with the message of the stars file error and
+  `"exit_code": 1`.
+- **Other methods:** `GET /api/star` gets `405` with `Allow: POST`.
+
 ## 6. Scan log
 
 Every successful scan is logged, in addition to the report on stdout.
@@ -957,12 +1122,12 @@ Every successful scan is logged, in addition to the report on stdout.
 | Code | Meaning | Example message (stderr) |
 |------|---------|--------------------------|
 | `0` | Scan completed, including when zero skills were found | |
-| `1` | Unexpected internal error | `error: unexpected failure: <details>` |
+| `1` | Unexpected internal error, or the stars file can't be read or saved (section 5.11) | `error: unexpected failure: <details>`, `error: could not save stars <file>: <reason>` |
 | `2` | Invalid usage or URL | `error: not a GitHub repository URL: https://gitlab.com/a/b` |
 | `3` | Repository not found or not accessible | `error: repository owner/repo not found (is it private? set GITHUB_TOKEN)` |
 | `4` | Default branch cannot be cloned, e.g. the repository is empty | `error: branch 'main' not found in owner/repo (is the repository empty?)` |
 | `5` | Network or GitHub API failure, including rate limiting | `error: GitHub API rate limit exceeded; set GITHUB_TOKEN to raise the limit` |
-| `6` | `--skill` names no skill in the repository | `error: no skill 'pdf' in owner/repo` |
+| `6` | `--skill`, `star` or `unstar` names no skill in the repository | `error: no skill 'pdf' in owner/repo` |
 | `130` | Interrupted with Ctrl-C | `error: scan interrupted` |
 
 `browse` and `shell` exit `2` when stdin or stdout isn't a terminal (sections 5.8 and
@@ -1040,6 +1205,14 @@ skill (section 4.3).
 24. The web view loads several repositories, groups their skills, and searches across all
     of them, including with `repo:<text>`. Similar skills can point into another
     repository (section 5.10).
+25. `skill-atlas star <url> <skill>` stars a skill, `unstar` removes the star, and `stars`
+    lists every starred skill. `scan` tags starred skills, and `--filter is:starred` lists
+    only them (section 5.11).
+26. In `browse`, `s` stars or unstars the selected skill. In the shell, `/star`, `/unstar`
+    and `/stars` do the same as the CLI commands (section 5.11).
+27. In the web view, the star button stars or unstars the selected skill, the list shows
+    `★`, and the starred-only button filters to starred skills. A star set in one view
+    shows in every other, because they share one stars file (section 5.11).
 
 ## 11. Testing
 
@@ -1077,7 +1250,8 @@ run:
   - `GITHUB_TOKEN` removed
   - `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_NOSYSTEM=1`, so the developer's git
     configuration cannot change the outcome
-  - `XDG_STATE_HOME` and `java.io.tmpdir` pointing into per-test temporary directories
+  - `XDG_STATE_HOME`, `XDG_DATA_HOME` (the stars file) and `java.io.tmpdir` pointing into
+    per-test temporary directories
 - **Fixed terminal.** The rich view is tested inside a pseudo-terminal with a fixed size
   of 100×40.
 - **No timing assumptions.** Tests never sleep to wait for something to happen. They wait
@@ -1145,6 +1319,15 @@ They are meant for tests only.
 | `shell` screen | Mosaic snapshot tests of the prompt with its hint, the open palette, and the filtered palette with highlights |
 | `shell` in a pseudo-terminal | Type `/sc`, Tab, a URL, Enter; wait for the report; `/filter tests`; `/skill ` with a Tab-completed skill name; `/quit`; exit `0`; exactly one scan log line |
 | `shell` Ctrl-C during a scan | The scan is cancelled with `error: scan interrupted`, the shell keeps running, and `/quit` exits `0` with no scan log line |
+| Stars: store | Unit tests: star, unstar, already starred, a star matched through a copy path and with another repository case, the sorted file text, a missing file, an invalid file left untouched |
+| Stars: filter | `is:starred` alone, with words and with `repo:`; it's never highlighted; another `is:` word is a plain word |
+| `star`, `unstar`, `stars` | Exact plain output and stars file text; already starred and not starred; not found exits `6`; an ambiguous name exits `2`; one scan log line per `star` or `unstar` and none for `stars`; `No starred skills yet.` |
+| `scan` with stars | `[starred]` in the list, with several repositories, and in `--skill`; `--filter is:starred`; an invalid stars file warns on stderr and the scan still exits `0` |
+| `star` in a terminal | Escape codes are present, and the text matches section 5.11 |
+| `browse` stars | Unit tests: `s` stars and unstars and saves; `★` in the list and the right pane; `is:starred` drops an unstarred skill and selects the first visible one; a save error shows in the bottom line until the next key |
+| `shell` stars | Unit tests: `/star`, `/unstar`, `/stars`, "No repository yet", a missing argument, skill names completed after `/star `, a star changed elsewhere seen by `/filter is:starred` |
+| Web API stars | `starred` in `/api/scan` and `/api/scans`; `POST /api/star` stars and unstars and writes the stars file; wrong content type `415`; a foreign `Origin` `403`; an invalid body `400`; `GET /api/star` `405` |
+| Browser: stars | The star button stars the selected skill, shows `★` in the list, and survives a reload; `s` toggles it; the starred-only button lists only starred skills and puts `is:starred` in the URL; a skill starred with the CLI shows as starred |
 | `serve --port 0` | Prints the URL. `GET /` returns the page; `/app.js` and `/style.css` return the assets |
 | Web API scan | Exact JSON body; one scan log line; temp directory removed |
 | Web API errors | Invalid URL `400`, unknown repository `404`, missing `url` `400`; exact JSON bodies |
@@ -1297,6 +1480,16 @@ proves. The spec section and acceptance criterion it covers are in brackets.
 | `04-ignored` | Scroll to the ignored fixtures | Test fixtures are set aside, with repository prefixes (4.4, 5.10) |
 | `05-cross-similar` | Select `split-platform-code` | Similar skills from other repositories, labeled with their repository (5.10) |
 | `06-chip-removed` | Remove the `acme/agent-skills` chip | Its group is dropped; the others remain (5.10) |
+
+**Web view: `web-stars`** on `acme/agent-skills`
+
+| Moment | Step | Proves |
+|--------|------|--------|
+| `01-star-button` | Select `pdf-toolkit`, click the star button | `★ Starred` with `aria-pressed`, the `★ starred` tag, and the list icon (5.11, AC 27) |
+| `02-star-key` | Select `spreadsheet` and `docx-editor`, press `s` on each | The `s` key, and `★` icons on three skills (5.11, AC 27) |
+| `03-starred-only` | Click the starred-only button | Only the three starred skills are listed (5.11) |
+| `04-starred-words` | Add ` word` to the filter | `is:starred` combines with words: only `docx-editor` (5.5, 5.11) |
+| `05-after-reload` | Esc, reload, starred-only | Stars are saved, and survive a reload (5.11, AC 27) |
 
 **Terminal (VHS): `cli`**
 
